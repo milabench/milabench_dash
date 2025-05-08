@@ -100,3 +100,12 @@ export const getMilabenchList = async (): Promise<string[]> => {
         return handleError(error);
     }
 };
+
+export const getPackMetricsPlot = async (execId: number, packId: number): Promise<string> => {
+    try {
+        const response = await axios.get(`/html/exec/${execId}/packs/${packId}/metrics`);
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};

@@ -35,7 +35,8 @@ export interface Pack {
     status: string;
     return_code: number;
     walltime: number;
-    metrics: Metric[];
+    metrics?: Metric[];
+    plot?: string;
 }
 
 export interface Metric {

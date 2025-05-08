@@ -10,7 +10,7 @@ import { ExecutionReport } from './components/views/ExecutionReport';
 
 const queryClient = new QueryClient();
 
-function App() { 
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ChakraProvider>
