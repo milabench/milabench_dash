@@ -386,6 +386,10 @@ export const PivotView = () => {
                                 <option value="<=">Less Than or Equal (&lt;=)</option>
                                 <option value="in">In List (in)</option>
                                 <option value="not in">Not In List (not in)</option>
+                                <option value="like">Like</option>
+                                <option value="not like">Not Like</option>
+                                <option value="is">Is</option>
+                                <option value="is not">Is Not</option>
                             </Select>
                             <Input
                                 placeholder="Enter filter value"

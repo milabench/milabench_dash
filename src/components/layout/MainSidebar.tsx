@@ -9,9 +9,10 @@ interface NavItem {
 const navItems: NavItem[] = [
     { label: 'Dashboard', path: '/' },
     { label: 'Executions', path: '/executions' },
-    { label: 'Metrics', path: '/metrics' },
-    { label: 'Summary', path: '/summary' },
+    // { label: 'Metrics', path: '/metrics' },
+    // { label: 'Summary', path: '/summary' },
     { label: 'Pivot View', path: '/pivot' },
+    { label: 'Explorer', path: '/explorer' },
 ];
 
 export const MainSidebar = () => {
