@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Box,
     VStack,
@@ -23,7 +23,7 @@ import {
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { SearchIcon, AddIcon, DeleteIcon } from '@chakra-ui/icons';
 
 interface Filter {
@@ -79,10 +79,30 @@ const ensureFieldFormat = (field: string) => {
 
 export const ExplorerView = () => {
     const toast = useToast();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [filters, setFilters] = useState<Filter[]>([]);
     const [availableFields, setAvailableFields] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [searchParams, setSearchParams] = useState<Filter[]>([]);
+
+    // Initialize filters from URL parameters
+    useEffect(() => {
+        const filtersParam = searchParams.get('filters');
+        if (filtersParam) {
+            try {
+                const decodedFilters = JSON.parse(atob(filtersParam));
+                setFilters(decodedFilters);
+                // Trigger search with decoded filters
+                handleSearchWithFilters(decodedFilters);
+            } catch (error) {
+                toast({
+                    title: 'Invalid URL parameters',
+                    description: 'Could not parse filters from URL',
+                    status: 'error',
+                    duration: 5000,
+                });
+            }
+        }
+    }, []);
 
     // Fetch available fields
     const { data: fields } = useQuery({
@@ -96,26 +116,29 @@ export const ExplorerView = () => {
 
     // Fetch executions based on filters
     const { data: executions, isLoading: isQueryLoading, refetch } = useQuery({
-        queryKey: ['explorerExecutions', searchParams],
+        queryKey: ['explorerExecutions', filters],
         queryFn: async () => {
             const params = new URLSearchParams();
-            if (searchParams.length > 0) {
-                params.append('filters', btoa(JSON.stringify(searchParams)));
+            if (filters.length > 0) {
+                params.append('filters', btoa(JSON.stringify(filters)));
             }
             const response = await axios.get(`/api/exec/explore?${params.toString()}`);
             return response.data;
         },
-        enabled: searchParams.length > 0,
+        enabled: filters.length > 0,
     });
 
     const addFilter = () => {
-        setFilters([...filters, { field: '', operator: '==', value: '' }]);
+        const newFilters = [...filters, { field: '', operator: '==', value: '' }];
+        setFilters(newFilters);
+        updateUrlParams(newFilters);
     };
 
     const removeFilter = (index: number) => {
         const newFilters = [...filters];
         newFilters.splice(index, 1);
         setFilters(newFilters);
+        updateUrlParams(newFilters);
     };
 
     const updateFilter = (index: number, field: string, operator: string, value: string) => {
@@ -124,10 +147,20 @@ export const ExplorerView = () => {
         const formattedField = ensureFieldFormat(field);
         newFilters[index] = { field: formattedField, operator, value };
         setFilters(newFilters);
+        updateUrlParams(newFilters);
     };
 
-    const handleSearch = async () => {
-        if (filters.length === 0) {
+    const updateUrlParams = (newFilters: Filter[]) => {
+        if (newFilters.length > 0) {
+            searchParams.set('filters', btoa(JSON.stringify(newFilters)));
+        } else {
+            searchParams.delete('filters');
+        }
+        setSearchParams(searchParams);
+    };
+
+    const handleSearchWithFilters = async (filtersToSearch: Filter[]) => {
+        if (filtersToSearch.length === 0) {
             toast({
                 title: 'No filters',
                 description: 'Please add at least one filter to search',
@@ -139,9 +172,6 @@ export const ExplorerView = () => {
 
         setIsLoading(true);
         try {
-            // Update search params to trigger the query
-            setSearchParams([...filters]);
-            // Force a refetch of the data
             await refetch();
         } catch (error) {
             toast({
@@ -153,6 +183,10 @@ export const ExplorerView = () => {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleSearch = async () => {
+        await handleSearchWithFilters(filters);
     };
 
     // Get all unique field names from the executions data
@@ -316,7 +350,7 @@ export const ExplorerView = () => {
                                     ))}
                                 </Tbody>
                             </Table>
-                        ) : searchParams.length > 0 ? (
+                        ) : filters.length > 0 ? (
                             <Center p={8}>
                                 <Text color="gray.500">No results found</Text>
                             </Center>
