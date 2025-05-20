@@ -29,6 +29,7 @@ import {
     GridItem,
     IconButton,
     Center,
+    Tooltip,
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { getExecution, getPacks, getPackMetrics, getPackMetricsPlot } from '../../services/api';
@@ -48,6 +49,17 @@ const formatDuration = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}m ${remainingSeconds}s`;
+};
+
+
+const copyToClipboard = (toast: any, text: string) => {
+    return () => {
+        navigator.clipboard.writeText(text);
+        toast({
+            title: "Copied to clipboard",
+            status: "success",
+        });
+    }
 };
 
 export const ExecutionReport = () => {
@@ -83,32 +95,41 @@ export const ExecutionReport = () => {
                         setIsReportView(false);
                     }}
                 >
-                    {pack.name}
+                    {pack.tag}
                 </Button>
             ),
             width: '200px'
         },
         {
-            header: 'Status',
+            header: 'Command',
             accessor: (pack: Pack) => (
-                <Badge
-                    colorScheme={pack.status === 'completed' ? 'green' : pack.status === 'failed' ? 'red' : 'yellow'}
-                >
-                    {pack.status}
-                </Badge>
+                <Tooltip label={pack.command.join(' ')}>
+                    <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={copyToClipboard(toast, pack.command.join(' '))}
+                    >
+                        View Command
+                    </Button>
+                </Tooltip>
             ),
-            width: '100px',
+            width: '150px'
         },
         {
-            header: 'Duration',
-            accessor: (pack: Pack) => formatDuration(pack.walltime),
-            width: '100px',
-        },
-        {
-            header: 'Return Code',
-            accessor: 'return_code',
-            width: '100px',
-        },
+            header: "Config",
+            accessor: (pack: Pack) => (
+                <Tooltip label={<pre>{JSON.stringify(pack.config, null, 2)}</pre>}>
+                    <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={copyToClipboard(toast, JSON.stringify(pack.config, null, 2))}
+                    >
+                        View Config
+                    </Button>
+                </Tooltip>
+            ),
+            width: '150px'
+        }
     ];
 
     const generateReport = async () => {
@@ -168,6 +189,11 @@ export const ExecutionReport = () => {
 
                     {/* Execution Details */}
                     <Box p={4} borderWidth={1} borderRadius="md">
+                        <Stat>
+                            <StatLabel>Name</StatLabel>
+                            <StatNumber>{execution.name} </StatNumber>
+                            <StatHelpText>{execution.namespace}</StatHelpText>
+                        </Stat>
                         <SimpleGrid columns={2} spacing={4}>
                             <Stat>
                                 <StatLabel>GPU</StatLabel>
@@ -175,14 +201,26 @@ export const ExecutionReport = () => {
                                     {execution.meta?.accelerators?.gpus?.[0]?.product || 'N/A'}
                                 </StatNumber>
                                 <StatHelpText>
-                                    Driver: {execution.meta?.accelerators?.gpus?.[0]?.driver || 'N/A'}
+                                    Driver: {execution.meta?.accelerators?.system?.CUDA_DRIVER || 'N/A'}
                                 </StatHelpText>
                             </Stat>
                             <Stat>
                                 <StatLabel>PyTorch</StatLabel>
-                                <StatNumber>{execution.meta?.pytorch?.torch || 'N/A'}</StatNumber>
-                                <StatHelpText>CUDA: {execution.meta?.pytorch?.cuda || 'N/A'}</StatHelpText>
+                                <StatNumber>{execution.meta?.pytorch?.build_settings?.TORCH_VERSION || 'N/A'}</StatNumber>
+                                <StatHelpText>CUDA: {execution.meta?.pytorch?.build_settings?.CUDA_VERSION || 'N/A'}</StatHelpText>
                             </Stat>
+
+                            <Stat>
+                                <StatLabel>CPU</StatLabel>
+                                <StatNumber>{execution.meta?.cpu?.count || 'N/A'}</StatNumber>
+                                <StatHelpText>Name: {execution.meta?.cpu?.brand || 'N/A'}</StatHelpText>
+                            </Stat>
+                            <Stat>
+                                <StatLabel>System</StatLabel>
+                                <StatNumber>{execution.meta?.os?.machine|| 'N/A'}</StatNumber>
+                                <StatHelpText>Kernel: {execution.meta?.os?.release	 || 'N/A'}</StatHelpText>
+                            </Stat>
+
                             <Stat>
                                 <StatLabel>Status</StatLabel>
                                 <StatNumber>
@@ -198,13 +236,12 @@ export const ExecutionReport = () => {
                                         {execution.status}
                                     </Badge>
                                 </StatNumber>
-                                <StatHelpText>Return Code: {execution.return_code}</StatHelpText>
                             </Stat>
                             <Stat>
-                                <StatLabel>Duration</StatLabel>
-                                <StatNumber>{formatDuration(execution.walltime)}</StatNumber>
+                                <StatLabel>Created Time</StatLabel>
+                                <StatNumber>{new Date(execution.created_time).toLocaleString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</StatNumber>
                                 <StatHelpText>
-                                    Started: {formatDate(execution.meta?.timestamp || new Date().toISOString())}
+
                                 </StatHelpText>
                             </Stat>
                         </SimpleGrid>

@@ -18,6 +18,8 @@ import {
     useToast,
     IconButton,
     Tooltip,
+    Spinner,
+    Center,
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
@@ -32,18 +34,55 @@ interface Filter {
 
 interface Execution {
     id: string;
-    name: string;
-    pack: string;
-    status: string;
-    created_at: string;
-    metrics: { [key: string]: number };
+    run: string;
+    bench: string;
+    [key: string]: any; // For dynamic fields
 }
+
+// Helper function to format field names for display
+const formatFieldName = (field: string) => {
+    // Handle fields with "as" keyword
+    const parts = field.split(' as ');
+    const baseField = parts[0];
+
+    // Split the base field into table and path
+    const [table, path] = baseField.split(':');
+
+    // If there's an alias, use it
+    if (parts.length > 1) {
+        return parts[1];
+    }
+
+    // Otherwise format the field name nicely
+    return `${table}.${path}`;
+};
+
+// Helper function to ensure field has correct format
+const ensureFieldFormat = (field: string) => {
+    // If field already has a colon, return as is
+    if (field.includes(':')) {
+        return field;
+    }
+
+    // If field has "as" keyword, handle it
+    const parts = field.split(' as ');
+    const baseField = parts[0];
+
+    // Add default table prefix if missing
+    if (!baseField.includes(':')) {
+        const formattedField = `Exec:${baseField}`;
+        return parts.length > 1 ? `${formattedField} as ${parts[1]}` : formattedField;
+    }
+
+    return field;
+};
 
 export const ExplorerView = () => {
     const toast = useToast();
     const [filters, setFilters] = useState<Filter[]>([]);
     const [availableFields, setAvailableFields] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [searchParams, setSearchParams] = useState<Filter[]>([]);
 
     // Fetch available fields
     const { data: fields } = useQuery({
@@ -56,17 +95,17 @@ export const ExplorerView = () => {
     });
 
     // Fetch executions based on filters
-    const { data: executions, refetch: refetchExecutions } = useQuery({
-        queryKey: ['explorerExecutions', filters],
+    const { data: executions, isLoading: isQueryLoading, refetch } = useQuery({
+        queryKey: ['explorerExecutions', searchParams],
         queryFn: async () => {
             const params = new URLSearchParams();
-            if (filters.length > 0) {
-                params.append('filters', btoa(JSON.stringify(filters)));
+            if (searchParams.length > 0) {
+                params.append('filters', btoa(JSON.stringify(searchParams)));
             }
-            const response = await axios.get(`/api/executions?${params.toString()}`);
+            const response = await axios.get(`/api/exec/explore?${params.toString()}`);
             return response.data;
         },
-        enabled: filters.length > 0,
+        enabled: searchParams.length > 0,
     });
 
     const addFilter = () => {
@@ -81,7 +120,9 @@ export const ExplorerView = () => {
 
     const updateFilter = (index: number, field: string, operator: string, value: string) => {
         const newFilters = [...filters];
-        newFilters[index] = { field, operator, value };
+        // Ensure field has correct format before updating
+        const formattedField = ensureFieldFormat(field);
+        newFilters[index] = { field: formattedField, operator, value };
         setFilters(newFilters);
     };
 
@@ -98,7 +139,10 @@ export const ExplorerView = () => {
 
         setIsLoading(true);
         try {
-            await refetchExecutions();
+            // Update search params to trigger the query
+            setSearchParams([...filters]);
+            // Force a refetch of the data
+            await refetch();
         } catch (error) {
             toast({
                 title: 'Error searching executions',
@@ -109,6 +153,39 @@ export const ExplorerView = () => {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // Get all unique field names from the executions data
+    const getTableColumns = () => {
+        if (!executions || executions.length === 0) return [];
+
+        const allFields = new Set<string>();
+        executions.forEach((exec: Execution) => {
+            Object.keys(exec).forEach(key => allFields.add(key));
+        });
+
+        return Array.from(allFields);
+    };
+
+    // Format value based on field type
+    const formatValue = (field: string, value: any) => {
+        if (value === undefined || value === null) return '-';
+
+        // Handle numeric values
+        if (typeof value === 'number') {
+            return value.toLocaleString();
+        }
+
+        // Handle dates
+        if (field.toLowerCase().includes('date') || field.toLowerCase().includes('time')) {
+            try {
+                return new Date(value).toLocaleString();
+            } catch {
+                return value;
+            }
+        }
+
+        return value;
     };
 
     return (
@@ -140,7 +217,7 @@ export const ExplorerView = () => {
                                 >
                                     {availableFields.map((field) => (
                                         <option key={field} value={field}>
-                                            {field}
+                                            {formatFieldName(field)}
                                         </option>
                                     ))}
                                 </Select>
@@ -198,54 +275,56 @@ export const ExplorerView = () => {
                 <Box borderWidth={1} borderRadius="md" p={4}>
                     <VStack align="stretch" spacing={4}>
                         <Heading size="md">Results</Heading>
-                        <Table variant="simple">
-                            <Thead>
-                                <Tr>
-                                    <Th>Name</Th>
-                                    <Th>Pack</Th>
-                                    <Th>Status</Th>
-                                    <Th>Created At</Th>
-                                    <Th>Actions</Th>
-                                </Tr>
-                            </Thead>
-                            <Tbody>
-                                {executions?.map((execution: Execution) => (
-                                    <Tr key={execution.id}>
-                                        <Td>{execution.name}</Td>
-                                        <Td>{execution.pack}</Td>
-                                        <Td>
-                                            <Badge
-                                                colorScheme={
-                                                    execution.status === 'completed'
-                                                        ? 'green'
-                                                        : execution.status === 'failed'
-                                                            ? 'red'
-                                                            : 'yellow'
-                                                }
-                                            >
-                                                {execution.status}
-                                            </Badge>
-                                        </Td>
-                                        <Td>{new Date(execution.created_at).toLocaleString()}</Td>
-                                        <Td>
-                                            <HStack spacing={2}>
-                                                <Tooltip label="View Report">
-                                                    <Button
-                                                        as={Link}
-                                                        to={`/exec/${execution.id}`}
-                                                        size="sm"
-                                                        colorScheme="blue"
-                                                        variant="ghost"
-                                                    >
-                                                        Report
-                                                    </Button>
-                                                </Tooltip>
-                                            </HStack>
-                                        </Td>
+                        {isQueryLoading ? (
+                            <Center p={8}>
+                                <Spinner size="xl" />
+                            </Center>
+                        ) : executions && executions.length > 0 ? (
+                            <Table variant="simple">
+                                <Thead>
+                                    <Tr>
+                                        {getTableColumns().map((field) => (
+                                            <Th key={field}>{formatFieldName(field)}</Th>
+                                        ))}
+                                        <Th>Actions</Th>
                                     </Tr>
-                                ))}
-                            </Tbody>
-                        </Table>
+                                </Thead>
+                                <Tbody>
+                                    {executions.map((execution: Execution) => (
+                                        <Tr key={execution.id}>
+                                            {getTableColumns().map((field) => (
+                                                <Td key={`${execution.id}-${field}`}>
+                                                    {formatValue(field, execution[field])}
+                                                </Td>
+                                            ))}
+                                            <Td>
+                                                <HStack spacing={2}>
+                                                    <Tooltip label="View Report">
+                                                        <Button
+                                                            as={Link}
+                                                            to={`/executions/${execution.id}`}
+                                                            size="sm"
+                                                            colorScheme="blue"
+                                                            variant="ghost"
+                                                        >
+                                                            Report
+                                                        </Button>
+                                                    </Tooltip>
+                                                </HStack>
+                                            </Td>
+                                        </Tr>
+                                    ))}
+                                </Tbody>
+                            </Table>
+                        ) : searchParams.length > 0 ? (
+                            <Center p={8}>
+                                <Text color="gray.500">No results found</Text>
+                            </Center>
+                        ) : (
+                            <Center p={8}>
+                                <Text color="gray.500">Add filters and click Search to see results</Text>
+                            </Center>
+                        )}
                     </VStack>
                 </Box>
             </VStack>

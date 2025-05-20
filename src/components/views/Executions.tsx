@@ -35,6 +35,11 @@ export const Executions = () => {
             width: '80px',
         },
         {
+            header: 'Name',
+            accessor: (exec: Execution) => exec.name || 'N/A',
+            width: '200px',
+        },
+        {
             header: 'GPU',
             accessor: (exec: Execution) => {
                 const gpus = exec.meta?.accelerators?.gpus;
