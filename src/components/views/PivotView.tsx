@@ -22,6 +22,7 @@ import {
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
+import { useSearchParams } from 'react-router-dom';
 
 interface PivotField {
     field: string;
@@ -33,6 +34,7 @@ interface PivotField {
 export const PivotView = () => {
     const toast = useToast();
     const { isOpen, onOpen, onClose } = useDisclosure();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [selectedField, setSelectedField] = useState<PivotField | null>(null);
     const [fields, setFields] = useState<PivotField[]>([
         { field: 'Exec:name', type: 'row' },
@@ -52,6 +54,57 @@ export const PivotView = () => {
             return response.data;
         },
     });
+
+    // Load configuration from URL on mount
+    useEffect(() => {
+        const rows = searchParams.get('rows');
+        const cols = searchParams.get('cols');
+        const values = searchParams.get('values');
+        const filters = searchParams.get('filters');
+
+        if (rows || cols || values || filters) {
+            const newFields: PivotField[] = [];
+
+            if (rows) {
+                rows.split(',').forEach(field => {
+                    newFields.push({ field, type: 'row' });
+                });
+            }
+
+            if (cols) {
+                cols.split(',').forEach(field => {
+                    newFields.push({ field, type: 'column' });
+                });
+            }
+
+            if (values) {
+                values.split(',').forEach(field => {
+                    newFields.push({ field, type: 'value' });
+                });
+            }
+
+            if (filters) {
+                try {
+                    const decodedFilters = JSON.parse(atob(filters));
+                    decodedFilters.forEach((filter: any) => {
+                        newFields.push({
+                            field: filter.field,
+                            type: 'filter',
+                            operator: filter.operator,
+                            value: filter.value
+                        });
+                    });
+                } catch (error) {
+                    console.error('Error parsing filters from URL:', error);
+                }
+            }
+
+            if (newFields.length > 0) {
+                setFields(newFields);
+                generatePivotFromFields(newFields);
+            }
+        }
+    }, []);
 
     const handleFieldDrop = (type: 'row' | 'column' | 'value' | 'filter', field: string) => {
         if (type === 'filter') {
@@ -75,24 +128,21 @@ export const PivotView = () => {
         setFields(newFields);
     };
 
-    const generatePivot = async () => {
+    const generatePivotFromFields = async (fieldsToUse: PivotField[]) => {
         try {
             setIsGenerating(true);
 
-            // Build query parameters like the old school implementation
             const params = new URLSearchParams();
 
-            // Add rows, columns, and values
-            const rows = fields.filter(f => f.type === 'row').map(f => f.field);
-            const cols = fields.filter(f => f.type === 'column').map(f => f.field);
-            const values = fields.filter(f => f.type === 'value').map(f => f.field);
+            const rows = fieldsToUse.filter(f => f.type === 'row').map(f => f.field);
+            const cols = fieldsToUse.filter(f => f.type === 'column').map(f => f.field);
+            const values = fieldsToUse.filter(f => f.type === 'value').map(f => f.field);
 
             params.append('rows', rows.join(','));
             params.append('cols', cols.join(','));
             params.append('values', values.join(','));
 
-            // Add filters as base64 encoded JSON
-            const filters = fields.filter(f => f.type === 'filter').map(f => ({
+            const filters = fieldsToUse.filter(f => f.type === 'filter').map(f => ({
                 field: f.field,
                 operator: f.operator,
                 value: f.value
@@ -102,7 +152,6 @@ export const PivotView = () => {
                 params.append('filters', btoa(JSON.stringify(filters)));
             }
 
-            // Fetch pivot data
             const response = await axios.get(`/html/pivot?${params.toString()}`);
             setPivotHtml(response.data);
         } catch (error) {
@@ -117,6 +166,33 @@ export const PivotView = () => {
         }
     };
 
+    const generatePivot = async () => {
+        const params = new URLSearchParams();
+
+        const rows = fields.filter(f => f.type === 'row').map(f => f.field);
+        const cols = fields.filter(f => f.type === 'column').map(f => f.field);
+        const values = fields.filter(f => f.type === 'value').map(f => f.field);
+
+        params.append('rows', rows.join(','));
+        params.append('cols', cols.join(','));
+        params.append('values', values.join(','));
+
+        const filters = fields.filter(f => f.type === 'filter').map(f => ({
+            field: f.field,
+            operator: f.operator,
+            value: f.value
+        }));
+
+        if (filters.length > 0) {
+            params.append('filters', btoa(JSON.stringify(filters)));
+        }
+
+        // Update URL with current configuration
+        setSearchParams(params);
+
+        await generatePivotFromFields(fields);
+    };
+
     const resetPivot = () => {
         setFields([
             { field: 'Exec:name', type: 'row' },
@@ -125,6 +201,7 @@ export const PivotView = () => {
             { field: 'Metric:value', type: 'value' },
         ]);
         setPivotHtml('');
+        setSearchParams(new URLSearchParams());
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -157,7 +234,7 @@ export const PivotView = () => {
     return (
         <Box p={4} h="100vh" display="flex" flexDirection="column">
             <Heading mb={6}>Pivot View</Heading>
-            <Grid templateColumns="300px 1fr" gap={6} flex="1" minH="0">
+            <Grid templateColumns="360px 1fr" gap={6} flex="1" minH="0">
                 {/* Fields Panel */}
                 <GridItem>
                     <VStack align="stretch" spacing={4}>

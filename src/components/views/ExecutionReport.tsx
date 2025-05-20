@@ -109,7 +109,7 @@ export const ExecutionReport = () => {
                         size="sm"
                         onClick={copyToClipboard(toast, pack.command.join(' '))}
                     >
-                        View Command
+                        Copy Command
                     </Button>
                 </Tooltip>
             ),
@@ -124,7 +124,7 @@ export const ExecutionReport = () => {
                         size="sm"
                         onClick={copyToClipboard(toast, JSON.stringify(pack.config, null, 2))}
                     >
-                        View Config
+                        Copy Config
                     </Button>
                 </Tooltip>
             ),
@@ -220,6 +220,13 @@ export const ExecutionReport = () => {
                                 <StatNumber>{execution.meta?.os?.machine|| 'N/A'}</StatNumber>
                                 <StatHelpText>Kernel: {execution.meta?.os?.release	 || 'N/A'}</StatHelpText>
                             </Stat>
+
+                            <Stat>
+                                <StatLabel>Milabench</StatLabel>
+                                <StatNumber>{execution.meta?.milabench?.tag || 'N/A'}</StatNumber>
+                                <StatHelpText>Date: {execution.meta?.milabench?.date || 'N/A'}</StatHelpText>
+                            </Stat>
+
 
                             <Stat>
                                 <StatLabel>Status</StatLabel>

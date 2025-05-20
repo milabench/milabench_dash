@@ -71,11 +71,11 @@ export const Executions = () => {
             ),
             width: '100px',
         },
-        {
-            header: 'Duration',
-            accessor: (exec: Execution) => formatDuration(exec.walltime),
-            width: '100px',
-        },
+        // {
+        //     header: 'Duration',
+        //     accessor: (exec: Execution) => formatDuration(exec.walltime),
+        //     width: '100px',
+        // },
         {
             header: 'Timestamp',
             accessor: (exec: Execution) => formatDate(exec.meta?.timestamp || new Date().toISOString()),

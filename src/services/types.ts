@@ -34,7 +34,8 @@ export interface Execution {
         };
         milabench: {
             tag: string;
-            version: string;
+            commit: string;
+            date: string;
         };
         system: {
             hostname: string;
