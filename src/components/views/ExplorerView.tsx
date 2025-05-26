@@ -42,6 +42,10 @@ interface Execution {
 
 // Helper function to format field names for display
 const formatFieldName = (field: string) => {
+    // Handle default fields with special names
+    if (field === 'id') return 'Exec:id';
+    if (field === 'run') return 'Exec:run';
+
     // Handle fields with "as" keyword
     const parts = field.split(' as ');
     const baseField = parts[0];
@@ -230,7 +234,18 @@ export const ExplorerView = () => {
             Object.keys(exec).forEach(key => allFields.add(key));
         });
 
-        return Array.from(allFields);
+        // Convert to array and ensure id and run are first
+        const fields = Array.from(allFields);
+        const orderedFields = ['id', 'run'];
+
+        // Add remaining fields, excluding id and run if they exist
+        fields.forEach(field => {
+            if (!orderedFields.includes(field)) {
+                orderedFields.push(field);
+            }
+        });
+
+        return orderedFields;
     };
 
     // Format value based on field type
