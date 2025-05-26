@@ -425,17 +425,16 @@ export const PivotView = () => {
                                 flex="1"
                                 borderWidth={1}
                                 borderRadius="md"
-                                overflow="hidden"
+                                overflow="auto"
+                                p={4}
                             >
                                 <iframe
                                     srcDoc={pivotHtml}
                                     style={{
                                         width: '100%',
                                         height: '100%',
-                                        border: 'none',
-                                        display: 'block',
                                     }}
-                                    sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                                    sandbox="allow-same-origin"
                                 />
                             </Box>
                         )}
