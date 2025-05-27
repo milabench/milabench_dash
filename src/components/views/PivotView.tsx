@@ -36,6 +36,7 @@ export const PivotView = () => {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [searchParams, setSearchParams] = useSearchParams();
     const [selectedField, setSelectedField] = useState<PivotField | null>(null);
+    const [isRelativePivot, setIsRelativePivot] = useState(false);
     const [fields, setFields] = useState<PivotField[]>([
         { field: 'Exec:name', type: 'row' },
         { field: 'Pack:name', type: 'row' },
@@ -106,6 +107,13 @@ export const PivotView = () => {
         }
     }, []);
 
+    // Add effect to regenerate pivot when view type changes
+    useEffect(() => {
+        if (fields.length > 0) {
+            generatePivotFromFields(fields);
+        }
+    }, [isRelativePivot]);
+
     const handleFieldDrop = (type: 'row' | 'column' | 'value' | 'filter', field: string) => {
         if (type === 'filter') {
             setSelectedField({ field, type });
@@ -152,7 +160,8 @@ export const PivotView = () => {
                 params.append('filters', btoa(JSON.stringify(filters)));
             }
 
-            const response = await axios.get(`/html/pivot?${params.toString()}`);
+            const endpoint = isRelativePivot ? '/html/relative/pivot' : '/html/pivot';
+            const response = await axios.get(`${endpoint}?${params.toString()}`);
             setPivotHtml(response.data);
         } catch (error) {
             toast({
@@ -418,6 +427,14 @@ export const PivotView = () => {
                                 Generate Pivot
                             </Button>
                             <Button onClick={resetPivot}>Reset</Button>
+                            <Button
+                                colorScheme={isRelativePivot ? "green" : "gray"}
+                                onClick={() => {
+                                    setIsRelativePivot(!isRelativePivot);
+                                }}
+                            >
+                                {!isRelativePivot ? "Relative View" : "Normal View"}
+                            </Button>
                         </HStack>
 
                         {pivotHtml && (
