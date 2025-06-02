@@ -103,15 +103,17 @@ export const ExecutionReport = () => {
         {
             header: 'Command',
             accessor: (pack: Pack) => (
-                <Tooltip label={pack.command.join(' ')}>
+                pack.command ?
+                <Tooltip label={(pack.command|| []).join(' ')}>
                     <Button 
                         variant="ghost" 
                         size="sm"
-                        onClick={copyToClipboard(toast, pack.command.join(' '))}
+                        onClick={copyToClipboard(toast, (pack.command|| []).join(' ') )}
                     >
                         Copy Command
                     </Button>
-                </Tooltip>
+                </Tooltip> :
+                <Text>-</Text>
             ),
             width: '150px'
         },

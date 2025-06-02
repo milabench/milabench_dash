@@ -309,7 +309,7 @@ export const ExplorerView = () => {
         // Create pivot parameters
         const params = new URLSearchParams();
 
-        let pivot_cols = [];
+        let pivot_cols = ['Metric:name'];
         for (const filter of filters) {
             pivot_cols.push(filter.field);
         }
