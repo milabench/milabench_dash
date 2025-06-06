@@ -6,6 +6,7 @@ import { Executions } from './components/views/Executions';
 import { PivotView } from './components/views/PivotView';
 import { ExecutionReport } from './components/views/ExecutionReport';
 import { ExplorerView } from './components/views/ExplorerView';
+import { Profile } from './components/views/Profile';
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ function App() {
               <Route path="/executions/:id" element={<ExecutionReport />} />
               <Route path="/pivot" element={<PivotView />} />
               <Route path="/explorer" element={<ExplorerView />} />
+              <Route path="/profile" element={<Profile />} />
             </Routes>
           </Layout>
         </Router>

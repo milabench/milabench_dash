@@ -87,3 +87,16 @@ export interface ApiError {
     message: string;
     status: number;
 }
+
+export interface Weight {
+    _id: number;
+    profile: string;
+    pack: string;
+    weight: number;
+    priority: number;
+    enabled: boolean;
+    group1?: string;
+    group2?: string;
+    group3?: string;
+    group4?: string;
+}

@@ -1,5 +1,7 @@
-import { Box, VStack, Text, useColorModeValue } from '@chakra-ui/react';
+import React, { useState, useEffect } from 'react';
+import { Box, VStack, Text, useColorModeValue, Badge } from '@chakra-ui/react';
 import { Link, useLocation } from 'react-router-dom';
+import Cookies from 'js-cookie';
 
 interface NavItem {
     label: string;
@@ -13,14 +15,23 @@ const navItems: NavItem[] = [
     // { label: 'Summary', path: '/summary' },
     { label: 'Pivot View', path: '/pivot' },
     { label: 'Explorer', path: '/explorer' },
+    { label: 'Profiles', path: '/profile' },
 ];
 
-export const MainSidebar = () => {
+export const MainSidebar: React.FC = () => {
     const location = useLocation();
     const bgColor = useColorModeValue('gray.800', 'gray.900');
     const hoverBg = useColorModeValue('gray.700', 'gray.800');
     const activeBg = useColorModeValue('blue.500', 'blue.400');
     const textColor = useColorModeValue('white', 'gray.100');
+    const [currentProfile, setCurrentProfile] = useState<string>('default');
+
+    useEffect(() => {
+        const savedProfile = Cookies.get('scoreProfile');
+        if (savedProfile) {
+            setCurrentProfile(savedProfile);
+        }
+    }, []);
 
     return (
         <Box
@@ -35,8 +46,11 @@ export const MainSidebar = () => {
             borderRight="1px"
             borderColor="gray.700"
         >
-            <Text fontSize="2xl" fontWeight="bold" mb={8}>
+            <Text fontSize="2xl" fontWeight="bold" mb={8} display="flex" alignItems="center" gap={2}>
                 Milabench
+                <Badge colorScheme="blue" fontSize="sm">
+                    {currentProfile}
+                </Badge>
             </Text>
             <VStack spacing={2} align="stretch">
                 {navItems.map((item) => (

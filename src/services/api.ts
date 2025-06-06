@@ -1,5 +1,17 @@
 import axios, { AxiosError } from 'axios';
-import type { Execution, Pack, Metric, Summary, ApiError } from './types';
+import type { Execution, Pack, Metric, Summary, ApiError, Weight } from './types';
+
+
+export interface ProfileCopyRequest {
+    sourceProfile: string;
+    newProfile: string;
+}
+
+export interface ExploreFilters {
+    field: string;
+    operator: string;
+    value: any;
+}
 
 const api = axios.create({
     baseURL: '/api',
@@ -104,6 +116,61 @@ export const getMilabenchList = async (): Promise<string[]> => {
 export const getPackMetricsPlot = async (execId: number, packId: number): Promise<string> => {
     try {
         const response = await axios.get(`/html/exec/${execId}/packs/${packId}/metrics`);
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const getProfileList = async (): Promise<string[]> => {
+    try {
+        const response = await api.get('/profile/list');
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const getProfileDetails = async (profile: string): Promise<Weight[]> => {
+    try {
+        const response = await api.get(`/profile/show/${profile}`);
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const saveProfile = async (profile: string, weights: Weight[]): Promise<{ status: string }> => {
+    try {
+        const response = await api.post(`/profile/save/${profile}`, weights);
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const copyProfile = async (request: ProfileCopyRequest): Promise<{ status: string }> => {
+    try {
+        const response = await api.post('/profile/copy', request);
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const getSavedQueries = async (): Promise<string[]> => {
+    try {
+        const response = await api.get('/query/list');
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const exploreExecutions = async (filters?: ExploreFilters[]): Promise<any[]> => {
+    try {
+        const params = filters ? { filters: btoa(JSON.stringify(filters)) } : {};
+        const response = await api.get('/exec/explore', { params });
         return response.data;
     } catch (error) {
         return handleError(error);
