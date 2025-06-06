@@ -35,6 +35,7 @@ export const Layout = ({ children }: LayoutProps) => {
             <Box
                 ml="280px"
                 p={8}
+                width="75%"
                 minH="100vh"
                 transition="margin-left 0.3s ease"
             >

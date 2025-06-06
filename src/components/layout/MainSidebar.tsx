@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
     { label: 'Pivot View', path: '/pivot' },
     { label: 'Explorer', path: '/explorer' },
     { label: 'Profiles', path: '/profile' },
+    { label: 'Scaling', path: '/scaling' },
 ];
 
 export const MainSidebar: React.FC = () => {
