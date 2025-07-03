@@ -8,8 +8,8 @@ import { ExecutionReport } from './components/views/ExecutionReport';
 import { ExplorerView } from './components/views/ExplorerView';
 import { Profile } from './components/views/Profile';
 import Scaling from './components/views/Scaling';
-
-
+import GroupedView from './components/views/GroupedView';
+import SavedQueriesView from './components/views/SavedQueriesView';
 
 import { extendTheme } from "@chakra-ui/react";
 
@@ -26,7 +26,6 @@ const theme = extendTheme({
   },
 });
 
-
 const queryClient = new QueryClient();
 
 function App() {
@@ -35,7 +34,7 @@ function App() {
       <ChakraProvider>
         <Router>
           <Layout>
-            <Routes> 
+            <Routes>
               <Route path="/" element={<Executions />} />
               <Route path="/executions" element={<Executions />} />
               <Route path="/executions/:id" element={<ExecutionReport />} />
@@ -43,6 +42,8 @@ function App() {
               <Route path="/explorer" element={<ExplorerView />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/scaling" element={<Scaling />} />
+              <Route path="/grouped" element={<GroupedView />} />
+              <Route path="/saved-queries" element={<SavedQueriesView />} />
             </Routes>
           </Layout>
         </Router>

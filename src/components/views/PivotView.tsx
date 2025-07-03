@@ -19,10 +19,14 @@ import {
     ModalBody,
     ModalCloseButton,
     useDisclosure,
+    FormControl,
+    FormLabel,
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
+import { saveQuery, getAllSavedQueries } from '../../services/api';
+import { AddIcon } from '@chakra-ui/icons';
 
 interface PivotField {
     field: string;
@@ -47,6 +51,11 @@ export const PivotView = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const dropZonesRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
+    // Save/Load modal state
+    const { isOpen: isSaveModalOpen, onOpen: onSaveModalOpen, onClose: onSaveModalClose } = useDisclosure();
+    const { isOpen: isLoadModalOpen, onOpen: onLoadModalOpen, onClose: onLoadModalClose } = useDisclosure();
+    const [saveQueryName, setSaveQueryName] = useState<string>('');
+
     // Fetch available fields from /api/keys
     const { data: availableFields } = useQuery({
         queryKey: ['pivotFields'],
@@ -54,6 +63,12 @@ export const PivotView = () => {
             const response = await axios.get('/api/keys');
             return response.data;
         },
+    });
+
+    // Fetch saved queries for load functionality
+    const { data: savedQueries } = useQuery({
+        queryKey: ['savedQueries'],
+        queryFn: getAllSavedQueries,
     });
 
     // Load configuration from URL on mount
@@ -240,9 +255,159 @@ export const PivotView = () => {
         handleFieldDrop(type, field);
     };
 
+    const handleSaveQuery = async () => {
+        if (!saveQueryName.trim()) {
+            toast({
+                title: 'Query name required',
+                description: 'Please enter a name for your saved query',
+                status: 'warning',
+                duration: 3000,
+            });
+            return;
+        }
+
+        try {
+            // Create the query object with current pivot configuration
+            const queryData = {
+                url: '/pivot',
+                parameters: {
+                    rows: fields.filter(f => f.type === 'row').map(f => f.field).join(','),
+                    cols: fields.filter(f => f.type === 'column').map(f => f.field).join(','),
+                    values: fields.filter(f => f.type === 'value').map(f => f.field).join(','),
+                    filters: fields.filter(f => f.type === 'filter').length > 0 ?
+                        btoa(JSON.stringify(fields.filter(f => f.type === 'filter').map(f => ({
+                            field: f.field,
+                            operator: f.operator,
+                            value: f.value
+                        })))) : '',
+                    isRelativePivot: isRelativePivot,
+                    timestamp: new Date().toISOString()
+                }
+            };
+
+            await saveQuery(saveQueryName, queryData);
+
+            toast({
+                title: 'Query saved successfully',
+                description: `Your query "${saveQueryName}" has been saved`,
+                status: 'success',
+                duration: 3000,
+            });
+
+            onSaveModalClose();
+            setSaveQueryName('');
+        } catch (error) {
+            toast({
+                title: 'Error saving query',
+                description: error instanceof Error ? error.message : 'Failed to save query',
+                status: 'error',
+                duration: 5000,
+            });
+        }
+    };
+
+    const handleLoadQuery = (query: any) => {
+        const { url, parameters } = query.query;
+
+        if (url === '/pivot') {
+            // Load pivot-specific parameters
+            const newFields: PivotField[] = [];
+
+            // Load rows
+            if (parameters.rows) {
+                parameters.rows.split(',').forEach((field: string) => {
+                    if (field.trim()) {
+                        newFields.push({ field: field.trim(), type: 'row' });
+                    }
+                });
+            }
+
+            // Load columns
+            if (parameters.cols) {
+                parameters.cols.split(',').forEach((field: string) => {
+                    if (field.trim()) {
+                        newFields.push({ field: field.trim(), type: 'column' });
+                    }
+                });
+            }
+
+            // Load values
+            if (parameters.values) {
+                parameters.values.split(',').forEach((field: string) => {
+                    if (field.trim()) {
+                        newFields.push({ field: field.trim(), type: 'value' });
+                    }
+                });
+            }
+
+            // Load filters
+            if (parameters.filters) {
+                try {
+                    const decodedFilters = JSON.parse(atob(parameters.filters));
+                    decodedFilters.forEach((filter: any) => {
+                        newFields.push({
+                            field: filter.field,
+                            type: 'filter',
+                            operator: filter.operator,
+                            value: filter.value
+                        });
+                    });
+                } catch (error) {
+                    console.error('Error parsing filters from saved query:', error);
+                }
+            }
+
+            // Set fields and view type
+            setFields(newFields);
+            if (parameters.isRelativePivot !== undefined) {
+                setIsRelativePivot(parameters.isRelativePivot);
+            }
+
+            // Generate pivot with loaded configuration
+            generatePivotFromFields(newFields);
+
+            toast({
+                title: 'Query loaded',
+                description: `"${query.name}" has been loaded successfully`,
+                status: 'success',
+                duration: 3000,
+            });
+        } else {
+            // Navigate to different view
+            const params = new URLSearchParams();
+            Object.entries(parameters).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    params.set(key, String(value));
+                }
+            });
+
+            const fullUrl = params.toString() ? `${url}?${params.toString()}` : url;
+            window.location.href = fullUrl;
+        }
+
+        onLoadModalClose();
+    };
+
     return (
         <Box p={4} h="100vh" display="flex" flexDirection="column">
-            <Heading mb={6}>Pivot View</Heading>
+            <HStack justify="space-between" mb={6}>
+                <Heading>Pivot View</Heading>
+                <HStack spacing={4}>
+                    <Button
+                        colorScheme="green"
+                        onClick={onSaveModalOpen}
+                        leftIcon={<AddIcon />}
+                    >
+                        Save Query
+                    </Button>
+                    <Button
+                        colorScheme="blue"
+                        onClick={onLoadModalOpen}
+                    >
+                        Load Query
+                    </Button>
+                </HStack>
+            </HStack>
             <Grid templateColumns="360px 1fr" gap={6} flex="1" minH="0">
                 {/* Fields Panel */}
                 <GridItem>
@@ -498,6 +663,87 @@ export const PivotView = () => {
                             >
                                 Apply Filter
                             </Button>
+                        </VStack>
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
+
+            {/* Save Query Modal */}
+            <Modal isOpen={isSaveModalOpen} onClose={onSaveModalClose}>
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>Save Query</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={6}>
+                        <VStack spacing={4}>
+                            <FormControl>
+                                <FormLabel>Query Name</FormLabel>
+                                <Input
+                                    value={saveQueryName}
+                                    onChange={(e) => setSaveQueryName(e.target.value)}
+                                    placeholder="Enter a name for your query"
+                                />
+                            </FormControl>
+                            <HStack spacing={4} width="100%">
+                                <Button colorScheme="blue" onClick={handleSaveQuery} width="100%">
+                                    Save
+                                </Button>
+                                <Button onClick={onSaveModalClose} width="100%">
+                                    Cancel
+                                </Button>
+                            </HStack>
+                        </VStack>
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
+
+            {/* Load Query Modal */}
+            <Modal isOpen={isLoadModalOpen} onClose={onLoadModalClose} size="lg">
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>Load Saved Query</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={6}>
+                        <VStack spacing={4} align="stretch">
+                            {savedQueries && savedQueries.length > 0 ? (
+                                savedQueries
+                                    .filter((query: any) => query.query.url === '/pivot')
+                                    .map((query: any) => (
+                                        <Box
+                                            key={query._id}
+                                            p={4}
+                                            borderWidth={1}
+                                            borderRadius="md"
+                                            cursor="pointer"
+                                            _hover={{ bg: 'gray.50' }}
+                                            onClick={() => handleLoadQuery(query)}
+                                        >
+                                            <HStack justify="space-between">
+                                                <VStack align="start" spacing={1}>
+                                                    <Text fontWeight="medium">{query.name}</Text>
+                                                    <Text fontSize="sm" color="gray.600">
+                                                        Pivot View
+                                                    </Text>
+                                                    <Text fontSize="sm" color="gray.600">
+                                                        Created: {new Date(query.created_time).toLocaleString()}
+                                                    </Text>
+                                                </VStack>
+                                                <Button size="sm" colorScheme="blue">
+                                                    Load
+                                                </Button>
+                                            </HStack>
+                                        </Box>
+                                    ))
+                            ) : (
+                                <Text color="gray.500" textAlign="center">
+                                    No saved queries found
+                                </Text>
+                            )}
+                            {savedQueries && savedQueries.filter((query: any) => query.query.url === '/pivot').length === 0 && savedQueries.length > 0 && (
+                                <Text color="gray.500" textAlign="center">
+                                    No saved pivot queries found. Save queries from this view to see them here.
+                                </Text>
+                            )}
                         </VStack>
                     </ModalBody>
                 </ModalContent>

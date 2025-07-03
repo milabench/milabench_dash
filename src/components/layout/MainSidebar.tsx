@@ -17,6 +17,8 @@ const navItems: NavItem[] = [
     { label: 'Explorer', path: '/explorer' },
     { label: 'Profiles', path: '/profile' },
     { label: 'Scaling', path: '/scaling' },
+    { label: 'Grouped View', path: '/grouped' },
+    { label: 'Saved Queries', path: '/saved-queries' },
 ];
 
 export const MainSidebar: React.FC = () => {

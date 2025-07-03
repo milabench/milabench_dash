@@ -21,11 +21,21 @@ import {
     Spinner,
     Center,
     SimpleGrid,
+    Modal,
+    ModalOverlay,
+    ModalContent,
+    ModalHeader,
+    ModalBody,
+    ModalCloseButton,
+    useDisclosure,
+    FormControl,
+    FormLabel,
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { SearchIcon, AddIcon, DeleteIcon, RepeatIcon } from '@chakra-ui/icons';
+import { saveQuery, getAllSavedQueries } from '../../services/api';
 
 interface Filter {
     field: string;
@@ -95,6 +105,11 @@ export const ExplorerView = () => {
         milabench: [] as string[],
     });
 
+    // Save/Load modal state
+    const { isOpen: isSaveModalOpen, onOpen: onSaveModalOpen, onClose: onSaveModalClose } = useDisclosure();
+    const { isOpen: isLoadModalOpen, onOpen: onLoadModalOpen, onClose: onLoadModalClose } = useDisclosure();
+    const [saveQueryName, setSaveQueryName] = useState<string>('');
+
     // Initialize filters from URL parameters
     useEffect(() => {
         const filtersParam = searchParams.get('filters');
@@ -123,6 +138,12 @@ export const ExplorerView = () => {
             setAvailableFields(response.data);
             return response.data;
         },
+    });
+
+    // Fetch saved queries for load functionality
+    const { data: savedQueries } = useQuery({
+        queryKey: ['savedQueries'],
+        queryFn: getAllSavedQueries,
     });
 
     // Fetch executions based on filters
@@ -341,10 +362,116 @@ export const ExplorerView = () => {
         navigate(`/pivot?${params.toString()}`);
     };
 
+    const handleSaveQuery = async () => {
+        if (!saveQueryName.trim()) {
+            toast({
+                title: 'Query name required',
+                description: 'Please enter a name for your saved query',
+                status: 'warning',
+                duration: 3000,
+            });
+            return;
+        }
+
+        try {
+            // Create the query object with current filters and quick filters
+            const queryData = {
+                url: '/explorer',
+                parameters: {
+                    filters: filters.length > 0 ? btoa(JSON.stringify(filters)) : '',
+                    quickFilters: quickFilters,
+                    timestamp: new Date().toISOString()
+                }
+            };
+
+            await saveQuery(saveQueryName, queryData);
+
+            toast({
+                title: 'Query saved successfully',
+                description: `Your query "${saveQueryName}" has been saved`,
+                status: 'success',
+                duration: 3000,
+            });
+
+            onSaveModalClose();
+            setSaveQueryName('');
+        } catch (error) {
+            toast({
+                title: 'Error saving query',
+                description: error instanceof Error ? error.message : 'Failed to save query',
+                status: 'error',
+                duration: 5000,
+            });
+        }
+    };
+
+    const handleLoadQuery = (query: any) => {
+        const { url, parameters } = query.query;
+
+        if (url === '/explorer') {
+            // Load explorer-specific parameters
+            if (parameters.filters) {
+                try {
+                    const decodedFilters = JSON.parse(atob(parameters.filters));
+                    setFilters(decodedFilters);
+                    updateUrlParams(decodedFilters);
+                } catch (error) {
+                    toast({
+                        title: 'Error loading filters',
+                        description: 'Could not parse saved filters',
+                        status: 'error',
+                        duration: 5000,
+                    });
+                }
+            }
+
+            if (parameters.quickFilters) {
+                setQuickFilters(parameters.quickFilters);
+            }
+
+            toast({
+                title: 'Query loaded',
+                description: `"${query.name}" has been loaded successfully`,
+                status: 'success',
+                duration: 3000,
+            });
+        } else {
+            // Navigate to different view
+            const params = new URLSearchParams();
+            Object.entries(parameters).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    params.set(key, String(value));
+                }
+            });
+
+            const fullUrl = params.toString() ? `${url}?${params.toString()}` : url;
+            navigate(fullUrl);
+        }
+
+        onLoadModalClose();
+    };
+
     return (
         <Box p={4}>
             <VStack align="stretch" spacing={6}>
-                <Heading>Execution Explorer</Heading>
+                <HStack justify="space-between">
+                    <Heading>Execution Explorer</Heading>
+                    <HStack spacing={4}>
+                        <Button
+                            colorScheme="green"
+                            onClick={onSaveModalOpen}
+                            leftIcon={<AddIcon />}
+                        >
+                            Save Query
+                        </Button>
+                        <Button
+                            colorScheme="blue"
+                            onClick={onLoadModalOpen}
+                        >
+                            Load Query
+                        </Button>
+                    </HStack>
+                </HStack>
 
                 {/* Quick Filters Section */}
                 <Box borderWidth={1} borderRadius="md" p={4}>
@@ -534,14 +661,24 @@ export const ExplorerView = () => {
                     <VStack align="stretch" spacing={4}>
                         <HStack justify="space-between">
                             <Heading size="md">Results</Heading>
-                            <Button
-                                leftIcon={<RepeatIcon />}
-                                onClick={handleCompare}
-                                colorScheme="purple"
-                                isDisabled={!executions || executions.length === 0}
-                            >
-                                Compare
-                            </Button>
+                            <HStack>
+                                <Button
+                                    leftIcon={<RepeatIcon />}
+                                    onClick={handleCompare}
+                                    colorScheme="purple"
+                                    isDisabled={!executions || executions.length === 0}
+                                >
+                                    Compare
+                                </Button>
+                                <Button
+                                    as={Link}
+                                    to={`/grouped?exec_ids=${executions?.map((e: Execution) => e.id).join(',')}`}
+                                    colorScheme="green"
+                                    isDisabled={!executions || executions.length === 0}
+                                >
+                                    Plot
+                                </Button>
+                            </HStack>
                         </HStack>
                         {isQueryLoading ? (
                             <Center p={8}>
@@ -596,6 +733,87 @@ export const ExplorerView = () => {
                     </VStack>
                 </Box>
             </VStack>
+
+            {/* Save Query Modal */}
+            <Modal isOpen={isSaveModalOpen} onClose={onSaveModalClose}>
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>Save Query</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={6}>
+                        <VStack spacing={4}>
+                            <FormControl>
+                                <FormLabel>Query Name</FormLabel>
+                                <Input
+                                    value={saveQueryName}
+                                    onChange={(e) => setSaveQueryName(e.target.value)}
+                                    placeholder="Enter a name for your query"
+                                />
+                            </FormControl>
+                            <HStack spacing={4} width="100%">
+                                <Button colorScheme="blue" onClick={handleSaveQuery} width="100%">
+                                    Save
+                                </Button>
+                                <Button onClick={onSaveModalClose} width="100%">
+                                    Cancel
+                                </Button>
+                            </HStack>
+                        </VStack>
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
+
+            {/* Load Query Modal */}
+            <Modal isOpen={isLoadModalOpen} onClose={onLoadModalClose} size="lg">
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>Load Saved Query</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={6}>
+                        <VStack spacing={4} align="stretch">
+                            {savedQueries && savedQueries.length > 0 ? (
+                                savedQueries
+                                    .filter((query: any) => query.query.url === '/explorer')
+                                    .map((query: any) => (
+                                        <Box
+                                            key={query._id}
+                                            p={4}
+                                            borderWidth={1}
+                                            borderRadius="md"
+                                            cursor="pointer"
+                                            _hover={{ bg: 'gray.50' }}
+                                            onClick={() => handleLoadQuery(query)}
+                                        >
+                                            <HStack justify="space-between">
+                                                <VStack align="start" spacing={1}>
+                                                    <Text fontWeight="medium">{query.name}</Text>
+                                                    <Text fontSize="sm" color="gray.600">
+                                                        Explorer View
+                                                    </Text>
+                                                    <Text fontSize="sm" color="gray.600">
+                                                        Created: {new Date(query.created_time).toLocaleString()}
+                                                    </Text>
+                                                </VStack>
+                                                <Button size="sm" colorScheme="blue">
+                                                    Load
+                                                </Button>
+                                            </HStack>
+                                        </Box>
+                                    ))
+                            ) : (
+                                <Text color="gray.500" textAlign="center">
+                                    No saved queries found
+                                </Text>
+                            )}
+                            {savedQueries && savedQueries.filter((query: any) => query.query.url === '/explorer').length === 0 && savedQueries.length > 0 && (
+                                <Text color="gray.500" textAlign="center">
+                                    No saved explorer queries found. Save queries from this view to see them here.
+                                </Text>
+                            )}
+                        </VStack>
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
         </Box>
     );
 };

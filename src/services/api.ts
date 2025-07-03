@@ -167,6 +167,42 @@ export const getSavedQueries = async (): Promise<string[]> => {
     }
 };
 
+export const getAllSavedQueries = async (): Promise<any[]> => {
+    try {
+        const response = await api.get('/query/all');
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const getSavedQuery = async (name: string): Promise<any> => {
+    try {
+        const response = await api.get(`/query/${name}`);
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const deleteSavedQuery = async (name: string): Promise<{ status: string }> => {
+    try {
+        const response = await api.delete(`/query/delete/${name}`);
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
+export const saveQuery = async (name: string, query: any): Promise<{ status: string }> => {
+    try {
+        const response = await api.post('/query/save', { name, query });
+        return response.data;
+    } catch (error) {
+        return handleError(error);
+    }
+};
+
 export const exploreExecutions = async (filters?: ExploreFilters[]): Promise<any[]> => {
     try {
         const params = filters ? { filters: btoa(JSON.stringify(filters)) } : {};
