@@ -12,7 +12,11 @@ import {
     Tr,
     Th,
     Td,
-    TableContainer
+    TableContainer,
+    Switch,
+    FormControl,
+    FormLabel,
+    HStack
 } from '@chakra-ui/react';
 import axios from 'axios';
 
@@ -75,37 +79,42 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
     const [reportData, setReportData] = React.useState<any>(null);
     const [isLoading, setIsLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
+    const [dropMinMax, setDropMinMax] = React.useState(true);
+
+    const fetchFastReport = async (dropMinMaxValue: boolean) => {
+        try {
+            setIsLoading(true);
+            setError(null);
+
+            const response = await axios.get(`/api/report/fast`, {
+                params: {
+                    exec_ids: executionId,
+                    drop_min_max: dropMinMaxValue.toString()
+                }
+            });
+
+            setReportData(response.data);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            setError(errorMessage);
+            toast({
+                title: 'Error fetching fast report',
+                description: errorMessage,
+                status: 'error',
+                duration: 5000,
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     React.useEffect(() => {
-        const fetchFastReport = async () => {
-            try {
-                setIsLoading(true);
-                setError(null);
+        fetchFastReport(dropMinMax);
+    }, [executionId, dropMinMax, toast]);
 
-                const response = await axios.get(`/api/report/fast`, {
-                    params: {
-                        exec_ids: executionId,
-                        drop_min_max: 'true'
-                    }
-                });
-
-                setReportData(response.data);
-            } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-                setError(errorMessage);
-                toast({
-                    title: 'Error fetching fast report',
-                    description: errorMessage,
-                    status: 'error',
-                    duration: 5000,
-                });
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchFastReport();
-    }, [executionId, toast]);
+    const handleDropMinMaxToggle = (value: boolean) => {
+        setDropMinMax(value);
+    };
 
     if (isLoading) {
         return (
@@ -122,19 +131,20 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
             </Box>
         );
     }
-   
-    let acc = {"log_score": 0, "weight": 0};
 
-     // Ensure reportData is an array
+    let acc = { "log_score": 0, "weight": 0 };
+
+    // Ensure reportData is an array
     const dataArray = (Array.isArray(reportData) ? reportData : [reportData]).map(item => {
         // Compute total log_score and weight
         acc["log_score"] += item["log_score"];
         acc["weight"] += item["weight"] * item["enabled"];
-        
+        acc["total"] = item["weight_total"];
+
         // Add some missing columns
         item["std%"] = item["std"] * 100 / item["perf"];
         item["sem%"] = item["sem"] * 100 / item["perf"];
-        
+
         return item;
     });
 
@@ -169,6 +179,20 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
                         ×
                     </Text>
                 </Box>
+
+                <FormControl>
+                    <HStack justify="space-between">
+                        <FormLabel htmlFor="drop-min-max" fontSize="sm" mb={0}>
+                            Drop Min/Max Values
+                        </FormLabel>
+                        <Switch
+                            id="drop-min-max"
+                            isChecked={dropMinMax}
+                            onChange={(e) => handleDropMinMaxToggle(e.target.checked)}
+                            size="sm"
+                        />
+                    </HStack>
+                </FormControl>
 
                 <Box
                     bg="white"
@@ -214,9 +238,9 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
                     borderColor="gray.200"
                 >
                     <Text>
-                        Score: <span style={{ color: 'green', fontWeight: 'bold' }}>{Math.exp(acc["log_score"] / acc["weight"]).toFixed(2)}</span>
+                        Score: <span style={{ color: 'green', fontWeight: 'bold' }}>{Math.exp(acc["log_score"] / acc["total"]).toFixed(2)}</span>
                     </Text>
-                    
+
                 </Box>
 
                 <Box
@@ -234,6 +258,9 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
                     </Text>
                     <Text fontSize="sm" color="gray.600">
                         Rows: {dataArray.length} | Columns: {columns.length}
+                    </Text>
+                    <Text fontSize="sm" color="gray.600">
+                        Drop Min/Max: {dropMinMax ? 'Enabled' : 'Disabled'}
                     </Text>
                 </Box>
             </VStack>
