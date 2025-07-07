@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Box,
     Heading,
@@ -40,6 +40,16 @@ import { Loading } from '../common/Loading';
 import axios from 'axios';
 import { ChevronLeftIcon } from '@chakra-ui/icons';
 import { MetricsView } from './MetricsView';
+import { FastReportView } from './FastReportView';
+import { HtmlReportView } from './HtmlReportView';
+
+// Utility function to read cookies
+const getCookie = (name: string): string | null => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+    return null;
+};
 
 const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
@@ -51,7 +61,6 @@ const formatDuration = (seconds: number) => {
     return `${minutes}m ${remainingSeconds}s`;
 };
 
-
 const copyToClipboard = (toast: any, text: string) => {
     return () => {
         navigator.clipboard.writeText(text);
@@ -62,13 +71,20 @@ const copyToClipboard = (toast: any, text: string) => {
     }
 };
 
+/**
+ * ExecutionReport Component
+ *
+ * Feature Toggle: Report Generation Method
+ * - Set cookie 'feature_db_report=true' to use fast API endpoint (/api/report/fast)
+ * - Set cookie 'feature_db_report=false' or remove cookie to use HTML endpoint (/html/report/{id})
+ * - The button will show which method is currently active
+ */
 export const ExecutionReport = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const toast = useToast();
     const [selectedPack, setSelectedPack] = useState<Pack | null>(null);
-    const [reportHtml, setReportHtml] = useState<string>('');
-    const [isReportView, setIsReportView] = useState(false);
+    const [sideView, setSideView] = useState('NONE');
 
     const { data: execution, isLoading: isLoadingExecution } = useQuery<Execution>({
         queryKey: ['execution', id],
@@ -92,7 +108,7 @@ export const ExecutionReport = () => {
                     onClick={(e) => {
                         e.stopPropagation();
                         setSelectedPack(pack);
-                        setIsReportView(false);
+                        setSideView('METRICS');
                     }}
                 >
                     {pack.tag}
@@ -104,16 +120,16 @@ export const ExecutionReport = () => {
             header: 'Command',
             accessor: (pack: Pack) => (
                 pack.command ?
-                <Tooltip label={(pack.command|| []).join(' ')}>
-                    <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={copyToClipboard(toast, (pack.command|| []).join(' ') )}
-                    >
-                        Copy Command
-                    </Button>
-                </Tooltip> :
-                <Text>-</Text>
+                    <Tooltip label={(pack.command || []).join(' ')}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={copyToClipboard(toast, (pack.command || []).join(' '))}
+                        >
+                            Copy Command
+                        </Button>
+                    </Tooltip> :
+                    <Text>-</Text>
             ),
             width: '150px'
         },
@@ -121,8 +137,8 @@ export const ExecutionReport = () => {
             header: "Config",
             accessor: (pack: Pack) => (
                 <Tooltip label={<pre>{JSON.stringify(pack.config, null, 2)}</pre>}>
-                    <Button 
-                        variant="ghost" 
+                    <Button
+                        variant="ghost"
                         size="sm"
                         onClick={copyToClipboard(toast, JSON.stringify(pack.config, null, 2))}
                     >
@@ -134,31 +150,21 @@ export const ExecutionReport = () => {
         }
     ];
 
-    const generateReport = async () => {
-        try {
-            const response = await axios.get(`/html/report/${id}`);
-            setReportHtml(response.data);
-            setIsReportView(true);
-            setSelectedPack({ name: 'Report', _id: 0 } as Pack);
-        } catch (error) {
-            toast({
-                title: 'Error generating report',
-                description: error instanceof Error ? error.message : 'Unknown error',
-                status: 'error',
-                duration: 5000,
-            });
-        }
+    const generateSQLReport = () => {
+        setSideView('FAST_REPORT');
+    };
+
+    const generatePythonReport = () => {
+        setSideView('HTML_REPORT');
     };
 
     const handlePackGroupClick = async (pack: Pack) => {
         setSelectedPack({ ...pack, _id: 0 });
-        setIsReportView(false);
+        setSideView('METRICS');
     };
 
-    const closeMetricsPanel = () => {
-        setSelectedPack(null);
-        setReportHtml('');
-        setIsReportView(false);
+    const closeSidePanel = () => {
+        setSideView('NONE');
     };
 
     if (isLoadingExecution || isLoadingPacks) {
@@ -179,19 +185,28 @@ export const ExecutionReport = () => {
     }, {} as { [key: string]: Pack[] }) || {};
 
     return (
-        <>
-            <Box p={4}>
-                <VStack align="stretch" spacing={6}>
-                    <HStack justify="space-between">
+        <HStack overflow="hidden">
+            <Box p={4} className="execution-details" maxW="800px" overflow="hidden">
+                <VStack align="stretch" spacing={6} overflow="hidden">
+                    <HStack justify="space-between" overflow="hidden">
                         <Heading>Execution Report</Heading>
-                        <Button colorScheme="blue" onClick={generateReport}>
-                            Generate Report
-                        </Button>
+                            <Button
+                                colorScheme='green'
+                                onClick={generateSQLReport}
+                            >
+                                SQL Report
+                            </Button>
+                            <Button
+                                colorScheme='blue'
+                                onClick={generatePythonReport}
+                            >
+                                Pandas Report
+                            </Button>
                     </HStack>
 
                     {/* Execution Details */}
-                    <Box p={4} borderWidth={1} borderRadius="md">
-                        <Stat>
+                    <Box p={4} borderWidth={1} borderRadius="md" overflow="hidden">
+                        <Stat >
                             <StatLabel>Name</StatLabel>
                             <StatNumber>{execution.name} </StatNumber>
                             <StatHelpText>{execution.namespace}</StatHelpText>
@@ -219,8 +234,8 @@ export const ExecutionReport = () => {
                             </Stat>
                             <Stat>
                                 <StatLabel>System</StatLabel>
-                                <StatNumber>{execution.meta?.os?.machine|| 'N/A'}</StatNumber>
-                                <StatHelpText>Kernel: {execution.meta?.os?.release	 || 'N/A'}</StatHelpText>
+                                <StatNumber>{execution.meta?.os?.machine || 'N/A'}</StatNumber>
+                                <StatHelpText>Kernel: {execution.meta?.os?.release || 'N/A'}</StatHelpText>
                             </Stat>
 
                             <Stat>
@@ -257,7 +272,7 @@ export const ExecutionReport = () => {
                     </Box>
 
                     {/* Packs */}
-                    <Box>
+                    <Box overflow="hidden">
                         <Heading size="md" mb={4}>Packs</Heading>
                         <Accordion allowMultiple>
                             {Object.entries(groupedPacks).map(([name, packs]) => (
@@ -288,13 +303,30 @@ export const ExecutionReport = () => {
                     </Box>
                 </VStack>
             </Box>
-            <MetricsView
-                selectedPack={selectedPack}
-                executionId={Number(id)}
-                onClose={closeMetricsPanel}
-                isReportView={isReportView}
-                reportHtml={reportHtml}
-            />
-        </>
+
+            <Box p={4} className="side-panel" >
+                {sideView === 'METRICS' && (
+                    <MetricsView
+                        selectedPack={selectedPack}
+                        executionId={Number(id)}
+                        onClose={closeSidePanel}
+                        isReportView={false}
+                        reportHtml=""
+                    />
+                )}
+                {sideView === 'FAST_REPORT' && (
+                    <FastReportView
+                        executionId={Number(id)}
+                        onClose={closeSidePanel}
+                    />
+                )}
+                {sideView === 'HTML_REPORT' && (
+                    <HtmlReportView
+                        executionId={Number(id)}
+                        onClose={closeSidePanel}
+                    />
+                )}
+            </Box>
+        </HStack>
     );
 };

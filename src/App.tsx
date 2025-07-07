@@ -30,25 +30,27 @@ const queryClient = new QueryClient();
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ChakraProvider>
-        <Router>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Executions />} />
-              <Route path="/executions" element={<Executions />} />
-              <Route path="/executions/:id" element={<ExecutionReport />} />
-              <Route path="/pivot" element={<PivotView />} />
-              <Route path="/explorer" element={<ExplorerView />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/scaling" element={<Scaling />} />
-              <Route path="/grouped" element={<GroupedView />} />
-              <Route path="/saved-queries" element={<SavedQueriesView />} />
-            </Routes>
-          </Layout>
-        </Router>
-      </ChakraProvider>
-    </QueryClientProvider>
+    <div className="app" style={{ width: '100vw' }}>
+      <QueryClientProvider client={queryClient}>
+        <ChakraProvider>
+          <Router>
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Executions />} />
+                <Route path="/executions" element={<Executions />} />
+                <Route path="/executions/:id" element={<ExecutionReport />} />
+                <Route path="/pivot" element={<PivotView />} />
+                <Route path="/explorer" element={<ExplorerView />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/scaling" element={<Scaling />} />
+                <Route path="/grouped" element={<GroupedView />} />
+                <Route path="/saved-queries" element={<SavedQueriesView />} />
+              </Routes>
+            </Layout>
+          </Router>
+        </ChakraProvider>
+      </QueryClientProvider>
+    </div>
   );
 }
 
