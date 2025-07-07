@@ -18,7 +18,7 @@ const Scaling: React.FC = () => {
     };
 
     return (
-        <Box p={4} height="100vh" width="100vh" display="flex" flexDirection="column">
+        <Box p={4} height="100vh" display="flex" flexDirection="column" className='scaling-container'>
             <HStack spacing={4} mb={4} width="100%">
                 <FormControl flex="1">
                     <FormLabel>X Axis</FormLabel>
@@ -45,7 +45,7 @@ const Scaling: React.FC = () => {
                 </FormControl>
             </HStack>
 
-            <Box flex="1" width="100vh">
+            <Box flex="1">
                 <iframe
                     src={`/html/scaling/x=${xAxis}/y=${yAxis}`}
                     style={{ width: '100%', height: '100%', border: 'none' }}

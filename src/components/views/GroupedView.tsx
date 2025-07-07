@@ -386,7 +386,7 @@ const GroupedView: React.FC = () => {
     };
 
     return (
-        <Box p={4} height="100vh" width="100vh" display="flex" flexDirection="column">
+        <Box p={4} height="100vh" display="flex" flexDirection="column">
             <VStack align="stretch" spacing={6}>
                 <HStack spacing={4} mb={4} width="100%">
                     <FormControl flex="1">
@@ -559,7 +559,7 @@ const GroupedView: React.FC = () => {
                     </Button>
                 </HStack>
 
-                <Box flex="1" width="100vh" height="100vh">
+                <Box flex="1">
                     <iframe
                         src={`/html/grouped/plot?${[
                             g1Value && `g1=${g1Value}`,

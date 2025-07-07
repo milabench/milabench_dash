@@ -12,7 +12,7 @@ import GroupedView from './components/views/GroupedView';
 import SavedQueriesView from './components/views/SavedQueriesView';
 
 import { extendTheme } from "@chakra-ui/react";
-
+import { DashboardView } from './components/views/Dashboard';
 const theme = extendTheme({
   styles: {
     global: {
@@ -36,14 +36,14 @@ function App() {
           <Router>
             <Layout>
               <Routes>
-                <Route path="/" element={<Executions />} />
+                <Route path="/" element={<DashboardView />} />
                 <Route path="/executions" element={<Executions />} />
                 <Route path="/executions/:id" element={<ExecutionReport />} />
                 <Route path="/pivot" element={<PivotView />} />
                 <Route path="/explorer" element={<ExplorerView />} />
-                <Route path="/profile" element={<Profile />} />
                 <Route path="/scaling" element={<Scaling />} />
                 <Route path="/grouped" element={<GroupedView />} />
+                <Route path="/profile" element={<Profile />} />
                 <Route path="/saved-queries" element={<SavedQueriesView />} />
               </Routes>
             </Layout>
