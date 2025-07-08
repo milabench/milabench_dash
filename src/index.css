@@ -85,3 +85,24 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+
+.bench-disabled {
+  color: gray;
+}
+
+.bench-enabled {
+  background-color: #e6f7ff;
+}
+
+.bench-weight {
+  font-weight: bold;
+}
+
+.bench-no-perf {
+  color: orange;
+}
+
+.bench-fail {
+  background-color: red;
+}

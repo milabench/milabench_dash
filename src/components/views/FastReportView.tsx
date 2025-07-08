@@ -16,7 +16,8 @@ import {
     Switch,
     FormControl,
     FormLabel,
-    HStack
+    HStack,
+    Select
 } from '@chakra-ui/react';
 import axios from 'axios';
 
@@ -26,13 +27,51 @@ interface FastReportViewProps {
 }
 
 // Helper function to render cell values
-const renderCellValue = (value: any): string => {
+// const renderCellValue = (value: any): string => {
+//     if (value === null || value === undefined) {
+//         return '-';
+//     }
+//     if (typeof value === 'number') {
+//         return value.toFixed(2);
+//     }
+//     if (typeof value === 'boolean') {
+//         return value ? 'Yes' : 'No';
+//     }
+//     if (typeof value === 'object') {
+//         return JSON.stringify(value);
+//     }
+//     return String(value);
+// };
+
+const renderCellValue = (value: any, col: string): string => {
     if (value === null || value === undefined) {
         return '-';
     }
+
+    if (col === "n") {
+        return value.toFixed(0);
+    }
+
+    if (col === "ngpu") {
+        return value.toFixed(0);
+    }
+
+    if (col === "weight") {
+        return value.toFixed(0);
+    }
+
+    if (col === "enabled") {
+        if (value > 0) {
+            return "Yes";
+        } else {
+            return "No";
+        }
+    }
+
     if (typeof value === 'number') {
         return value.toFixed(2);
     }
+
     if (typeof value === 'boolean') {
         return value ? 'Yes' : 'No';
     }
@@ -67,8 +106,8 @@ const columnPriority = {
     'n': 2,
     'ngpu': 3,
     'perf': 4,
-    'std': 5,
-    'sem': 6,
+    'std%': 5,
+    'sem%': 6,
     'score': 7,
     'log_score': 8,
     'weight': 9,
@@ -80,6 +119,7 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
     const [isLoading, setIsLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
     const [dropMinMax, setDropMinMax] = React.useState(true);
+    const [filterType, setFilterType] = React.useState<string>('all');
 
     const fetchFastReport = async (dropMinMaxValue: boolean) => {
         try {
@@ -116,6 +156,10 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
         setDropMinMax(value);
     };
 
+    const handleFilterChange = (value: string) => {
+        setFilterType(value);
+    };
+
     if (isLoading) {
         return (
             <Box p={4}>
@@ -132,7 +176,7 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
         );
     }
 
-    let acc = { "log_score": 0, "weight": 0 };
+    let acc = { "log_score": 0, "weight": 0, "total": 0 };
 
     // Ensure reportData is an array
     const dataArray = (Array.isArray(reportData) ? reportData : [reportData]).map(item => {
@@ -141,14 +185,39 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
         acc["weight"] += item["weight"] * item["enabled"];
         acc["total"] = item["weight_total"];
 
-        // Add some missing columns
-        item["std%"] = item["std"] * 100 / item["perf"];
-        item["sem%"] = item["sem"] * 100 / item["perf"];
+        // Only show a subset of the results to aboid crowding the table
+        let newRow = {
+            "bench": item["bench"],
+            "fail": item["fail"],
+            "n": item["n"],
+            "ngpu": item["ngpu"],
+            "perf": item["perf"],
+            "std%": item["std"] * 100 / item["perf"],
+            "sem%": item["sem"] * 100 / item["perf"],
+            "score": item["score"],
+            "log_score": item["log_score"],
+            "weight": item["weight"],
+            // In this case there is only one exec ID
+            // "exec_id": item["exec_id"],
+            "enabled": item["enabled"],
+        };
 
-        return item;
+        return newRow;
     });
 
-    const columns = getAllKeys(dataArray, columnPriority);
+    // Apply filter to data array
+    const filteredDataArray = dataArray.filter(row => {
+        switch (filterType) {
+            case 'weight':
+                return row.weight > 0;
+            case 'enabled':
+                return row.enabled > 0;
+            default:
+                return true; // 'all' - show everything
+        }
+    });
+
+    const columns = getAllKeys(filteredDataArray, columnPriority);
 
     return (
         <Box
@@ -180,19 +249,40 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
                     </Text>
                 </Box>
 
-                <FormControl>
-                    <HStack justify="space-between">
-                        <FormLabel htmlFor="drop-min-max" fontSize="sm" mb={0}>
-                            Drop Min/Max Values
-                        </FormLabel>
-                        <Switch
-                            id="drop-min-max"
-                            isChecked={dropMinMax}
-                            onChange={(e) => handleDropMinMaxToggle(e.target.checked)}
-                            size="sm"
-                        />
-                    </HStack>
-                </FormControl>
+                <HStack spacing={4}>
+                    <FormControl>
+                        <HStack justify="space-between">
+                            <FormLabel htmlFor="drop-min-max" fontSize="sm" mb={0}>
+                                Drop Min/Max Values
+                            </FormLabel>
+                            <Switch
+                                id="drop-min-max"
+                                isChecked={dropMinMax}
+                                onChange={(e) => handleDropMinMaxToggle(e.target.checked)}
+                                size="sm"
+                            />
+                        </HStack>
+                    </FormControl>
+
+                    <FormControl>
+                        <HStack justify="space-between">
+                            <FormLabel htmlFor="filter-type" fontSize="sm" mb={0}>
+                                Filter
+                            </FormLabel>
+                            <Select
+                                id="filter-type"
+                                value={filterType}
+                                onChange={(e) => handleFilterChange(e.target.value)}
+                                size="sm"
+                                width="150px"
+                            >
+                                <option value="all">All Benches</option>
+                                <option value="weight">Weight &gt; 0</option>
+                                <option value="enabled">Enabled Only</option>
+                            </Select>
+                        </HStack>
+                    </FormControl>
+                </HStack>
 
                 <Box
                     bg="white"
@@ -214,17 +304,27 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
                                 </Tr>
                             </Thead>
                             <Tbody>
-                                {dataArray.map((row, rowIndex) => (
-                                    <Tr key={rowIndex} _hover={{ bg: 'gray.50' }}>
-                                        {columns.map((column) => (
-                                            <Td key={column} fontSize="xs" px={2} py={2}>
-                                                <Text fontSize="xs" noOfLines={2}>
-                                                    {renderCellValue(row[column])}
-                                                </Text>
-                                            </Td>
-                                        ))}
-                                    </Tr>
-                                ))}
+                                {filteredDataArray.map((row, rowIndex) => {
+                                    let classNames = [
+                                        row.enabled ? 'bench-enabled' : 'bench-disabled',
+                                        `bench-${row.bench}`,
+                                        row.fail ? 'bench-fail' : 'bench-pass',
+                                        row.perf > 0 ? 'bench-perf' : 'bench-no-perf',
+                                        row.weight > 0 ? 'bench-weight' : 'bench-no-weight',
+                                    ];
+
+                                    return (
+                                        <Tr key={rowIndex} _hover={{ bg: 'gray.50' }} className={classNames.join(' ')} >
+                                            {columns.map((column) => (
+                                                <Td key={column} fontSize="xs" px={2} py={2}>
+                                                    <Text fontSize="xs" noOfLines={2}>
+                                                        {renderCellValue(row[column], column)}
+                                                    </Text>
+                                                </Td>
+                                            ))}
+                                        </Tr>
+                                    )
+                                })}
                             </Tbody>
                         </Table>
                     </TableContainer>
@@ -257,10 +357,13 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
                         Generated using /api/report/fast endpoint
                     </Text>
                     <Text fontSize="sm" color="gray.600">
-                        Rows: {dataArray.length} | Columns: {columns.length}
+                        Rows: {filteredDataArray.length} | Columns: {columns.length}
                     </Text>
                     <Text fontSize="sm" color="gray.600">
                         Drop Min/Max: {dropMinMax ? 'Enabled' : 'Disabled'}
+                    </Text>
+                    <Text fontSize="sm" color="gray.600">
+                        Filter: {filterType === 'all' ? 'All Benches' : filterType === 'weight' ? 'Weight > 0' : 'Enabled Only'}
                     </Text>
                 </Box>
             </VStack>
