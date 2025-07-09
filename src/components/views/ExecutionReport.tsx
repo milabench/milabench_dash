@@ -185,8 +185,8 @@ export const ExecutionReport = () => {
     }, {} as { [key: string]: Pack[] }) || {};
 
     return (
-        <HStack overflow="hidden">
-            <Box p={4} className="execution-details" maxW="800px" overflow="hidden">
+        <HStack align="flex-start">
+            <Box p={4} className="execution-details" maxW="800px">
                 <VStack align="stretch" spacing={6} overflow="hidden">
                     <HStack justify="space-between" overflow="hidden">
                         <Heading>Execution Report</Heading>
@@ -304,7 +304,7 @@ export const ExecutionReport = () => {
                 </VStack>
             </Box>
 
-            <Box p={4} className="side-panel" >
+            <Box p={4} className="side-panel" width="100%" height="100%">
                 {sideView === 'METRICS' && (
                     <MetricsView
                         selectedPack={selectedPack}

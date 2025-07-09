@@ -221,16 +221,10 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
 
     return (
         <Box
-            position="fixed"
-            top={0}
-            right={0}
-            width="50%"
+            p={3}
+            width="100%"
             height="100vh"
-            bg="white"
-            borderLeft="1px solid"
-            borderColor="gray.200"
-            overflow="auto"
-            zIndex={1000}
+            className='report-view'
         >
             <VStack align="stretch" spacing={4} p={4}>
                 <Box display="flex" justifyContent="space-between" alignItems="center">

@@ -55,43 +55,13 @@ export const HtmlReportView: React.FC<HtmlReportViewProps> = ({ executionId, onC
     }
 
     return (
-        <Box
-            position="fixed"
-            top={0}
-            right={0}
-            width="50%"
+        <Box 
+            p={3}
+            width="100%"
             height="100vh"
-            bg="white"
-            borderLeft="1px solid"
-            borderColor="gray.200"
-            overflow="hidden"
-            zIndex={1000}
+            className='metric-view'
         >
             <VStack align="stretch" spacing={0} height="100%">
-                <Box
-                    display="flex"
-                    justifyContent="space-between"
-                    alignItems="center"
-                    p={4}
-                    borderBottom="1px solid"
-                    borderColor="gray.200"
-                    bg="white"
-                >
-                    <VStack align="start" spacing={1}>
-                        <Heading size="md">HTML Report</Heading>
-                        <Badge colorScheme="blue">Iframe View</Badge>
-                    </VStack>
-                    <Text
-                        cursor="pointer"
-                        onClick={onClose}
-                        fontSize="lg"
-                        fontWeight="bold"
-                        _hover={{ color: 'gray.600' }}
-                    >
-                        ×
-                    </Text>
-                </Box>
-
                 <Box
                     bg="gray.50"
                     p={3}
@@ -115,6 +85,31 @@ export const HtmlReportView: React.FC<HtmlReportViewProps> = ({ executionId, onC
                         title="HTML Report"
                         sandbox="allow-same-origin allow-scripts"
                     />
+                </Box>
+
+                {/* Information Box */}
+                <Box
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    p={4}
+                    borderBottom="1px solid"
+                    borderColor="gray.200"
+                    bg="white"
+                >
+                    <VStack align="start" spacing={1}>
+                        <Heading size="md">HTML Report</Heading>
+                        <Badge colorScheme="blue">Iframe View</Badge>
+                    </VStack>
+                    <Text
+                        cursor="pointer"
+                        onClick={onClose}
+                        fontSize="lg"
+                        fontWeight="bold"
+                        _hover={{ color: 'gray.600' }}
+                    >
+                        ×
+                    </Text>
                 </Box>
             </VStack>
         </Box>
