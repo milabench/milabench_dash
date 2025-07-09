@@ -63,39 +63,12 @@ export const HtmlReportView: React.FC<HtmlReportViewProps> = ({ executionId, onC
         >
             <VStack align="stretch" spacing={0} height="100%">
                 <Box
-                    bg="gray.50"
-                    p={3}
-                    borderBottom="1px solid"
-                    borderColor="gray.200"
-                >
-                    <Text fontSize="sm" color="gray.600">
-                        Execution ID: {executionId} | Generated using /html/report/{executionId} endpoint
-                    </Text>
-                </Box>
-
-                <Box flex={1} position="relative">
-                    <iframe
-                        srcDoc={reportHtml}
-                        style={{
-                            width: '100%',
-                            height: '100%',
-                            border: 'none',
-                            backgroundColor: 'white'
-                        }}
-                        title="HTML Report"
-                        sandbox="allow-same-origin allow-scripts"
-                    />
-                </Box>
-
-                {/* Information Box */}
-                <Box
                     display="flex"
                     justifyContent="space-between"
                     alignItems="center"
                     p={4}
                     borderBottom="1px solid"
                     borderColor="gray.200"
-                    bg="white"
                 >
                     <VStack align="start" spacing={1}>
                         <Heading size="md">HTML Report</Heading>
@@ -111,6 +84,33 @@ export const HtmlReportView: React.FC<HtmlReportViewProps> = ({ executionId, onC
                         ×
                     </Text>
                 </Box>
+
+                <Box flex={1} position="relative">
+                    <iframe
+                        srcDoc={reportHtml}
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            border: 'none',
+                            
+                        }}
+                        title="HTML Report"
+                        sandbox="allow-same-origin allow-scripts"
+                    />
+                </Box>
+
+                {/* Information box */}
+                <Box
+                    bg="gray.50"
+                    p={3}
+                    borderBottom="1px solid"
+                    borderColor="gray.200"
+                >
+                    <Text fontSize="sm" color="gray.600">
+                        Execution ID: {executionId} | Generated using /html/report/{executionId} endpoint
+                    </Text>
+                </Box>
+
             </VStack>
         </Box>
     );
