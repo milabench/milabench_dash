@@ -21,12 +21,15 @@ import {
     useDisclosure,
     FormControl,
     FormLabel,
+    ButtonGroup,
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
 import { saveQuery, getAllSavedQueries } from '../../services/api';
 import { AddIcon } from '@chakra-ui/icons';
+import { PivotIframeView } from './PivotIframeView';
+import { PivotTableView } from './PivotTableView';
 
 interface PivotField {
     field: string;
@@ -41,14 +44,13 @@ export const PivotView = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [selectedField, setSelectedField] = useState<PivotField | null>(null);
     const [isRelativePivot, setIsRelativePivot] = useState(false);
+    const [viewMode, setViewMode] = useState<'iframe' | 'table'>('iframe');
     const [fields, setFields] = useState<PivotField[]>([
         { field: 'Exec:name', type: 'row' },
         { field: 'Pack:name', type: 'row' },
         { field: 'Metric:name', type: 'column' },
         { field: 'Metric:value', type: 'value' },
     ]);
-    const [pivotHtml, setPivotHtml] = useState<string>('');
-    const [isGenerating, setIsGenerating] = useState(false);
     const dropZonesRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
     // Save/Load modal state
@@ -117,17 +119,9 @@ export const PivotView = () => {
 
             if (newFields.length > 0) {
                 setFields(newFields);
-                generatePivotFromFields(newFields);
             }
         }
     }, []);
-
-    // Add effect to regenerate pivot when view type changes
-    useEffect(() => {
-        if (fields.length > 0) {
-            generatePivotFromFields(fields);
-        }
-    }, [isRelativePivot]);
 
     const handleFieldDrop = (type: 'row' | 'column' | 'value' | 'filter', field: string) => {
         if (type === 'filter') {
@@ -151,46 +145,7 @@ export const PivotView = () => {
         setFields(newFields);
     };
 
-    const generatePivotFromFields = async (fieldsToUse: PivotField[]) => {
-        try {
-            setIsGenerating(true);
-
-            const params = new URLSearchParams();
-
-            const rows = fieldsToUse.filter(f => f.type === 'row').map(f => f.field);
-            const cols = fieldsToUse.filter(f => f.type === 'column').map(f => f.field);
-            const values = fieldsToUse.filter(f => f.type === 'value').map(f => f.field);
-
-            params.append('rows', rows.join(','));
-            params.append('cols', cols.join(','));
-            params.append('values', values.join(','));
-
-            const filters = fieldsToUse.filter(f => f.type === 'filter').map(f => ({
-                field: f.field,
-                operator: f.operator,
-                value: f.value
-            }));
-
-            if (filters.length > 0) {
-                params.append('filters', btoa(JSON.stringify(filters)));
-            }
-
-            const endpoint = isRelativePivot ? '/html/relative/pivot' : '/html/pivot';
-            const response = await axios.get(`${endpoint}?${params.toString()}`);
-            setPivotHtml(response.data);
-        } catch (error) {
-            toast({
-                title: 'Error generating pivot',
-                description: error instanceof Error ? error.message : 'Unknown error',
-                status: 'error',
-                duration: 5000,
-            });
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-
-    const generatePivot = async () => {
+    const updateURLParams = () => {
         const params = new URLSearchParams();
 
         const rows = fields.filter(f => f.type === 'row').map(f => f.field);
@@ -213,8 +168,6 @@ export const PivotView = () => {
 
         // Update URL with current configuration
         setSearchParams(params);
-
-        await generatePivotFromFields(fields);
     };
 
     const resetPivot = () => {
@@ -224,7 +177,6 @@ export const PivotView = () => {
             { field: 'Metric:name', type: 'column' },
             { field: 'Metric:value', type: 'value' },
         ]);
-        setPivotHtml('');
         setSearchParams(new URLSearchParams());
     };
 
@@ -363,8 +315,7 @@ export const PivotView = () => {
                 setIsRelativePivot(parameters.isRelativePivot);
             }
 
-            // Generate pivot with loaded configuration
-            generatePivotFromFields(newFields);
+            // Fields are automatically used by child components
 
             toast({
                 title: 'Query loaded',
@@ -408,26 +359,15 @@ export const PivotView = () => {
                     </Button>
                 </HStack>
             </HStack>
-            <Grid templateColumns="360px 1fr" gap={6} flex="1" minH="0">
+
+            <Grid templateColumns="360px 1fr" gap={6} templateRows="200px 50px auto" flex="1" minH="0" className="pivot-view-grid" width="99%">
                 {/* Fields Panel */}
-                <GridItem>
+                <GridItem rowSpan={3} colSpan={1} className="pivot-fields">
                     <VStack align="stretch" spacing={4}>
                         <Heading size="md">Available Fields</Heading>
                         <Box
-                            h="calc(100vh - 200px)"
+                            h="calc(100vh - 170px)" 
                             overflowY="auto"
-                            css={{
-                                '&::-webkit-scrollbar': {
-                                    width: '4px',
-                                },
-                                '&::-webkit-scrollbar-track': {
-                                    width: '6px',
-                                },
-                                '&::-webkit-scrollbar-thumb': {
-                                    background: 'gray.300',
-                                    borderRadius: '24px',
-                                },
-                            }}
                         >
                             <VStack align="stretch" spacing={2}>
                                 {availableFields?.map((field: string) => (
@@ -436,11 +376,14 @@ export const PivotView = () => {
                                         p={2}
                                         bg="white"
                                         borderWidth={1}
-                                        borderRadius="md"
+                                        borderRadius="md" 
                                         cursor="move"
                                         _hover={{ bg: 'gray.50' }}
                                         draggable
                                         onDragStart={(e) => e.dataTransfer.setData('text/plain', field)}
+                                        overflowX="hidden"
+                                        textOverflow="ellipsis"
+                                        whiteSpace="nowrap"
                                     >
                                         {field}
                                     </Box>
@@ -450,177 +393,177 @@ export const PivotView = () => {
                     </VStack>
                 </GridItem>
 
-                {/* Pivot Builder */}
-                <GridItem>
-                    <VStack align="stretch" spacing={6} h="100%">
-                        <Grid templateColumns="repeat(4, 1fr)" gap={4}>
-                            {/* Rows */}
-                            <GridItem>
-                                <VStack align="stretch" spacing={2}>
-                                    <Heading size="sm">Rows</Heading>
-                                    <Box
-                                        ref={el => dropZonesRef.current['row'] = el}
-                                        p={4}
-                                        borderWidth={2}
-                                        borderStyle="dashed"
-                                        borderRadius="md"
-                                        minH="200px"
-                                        onDragOver={handleDragOver}
-                                        onDragLeave={handleDragLeave}
-                                        onDrop={(e) => handleDrop(e, 'row')}
-                                    >
-                                        {fields
-                                            .filter((f) => f.type === 'row')
-                                            .map((field, index) => (
-                                                <Badge
-                                                    key={`row-${index}`}
-                                                    m={1}
-                                                    p={2}
-                                                    cursor="pointer"
-                                                    onClick={() => removeField(fields.findIndex(f => f === field))}
-                                                >
-                                                    {field.field} ×
-                                                </Badge>
-                                            ))}
-                                    </Box>
-                                </VStack>
-                            </GridItem>
-
-                            {/* Columns */}
-                            <GridItem>
-                                <VStack align="stretch" spacing={2}>
-                                    <Heading size="sm">Columns</Heading>
-                                    <Box
-                                        ref={el => dropZonesRef.current['column'] = el}
-                                        p={4}
-                                        borderWidth={2}
-                                        borderStyle="dashed"
-                                        borderRadius="md"
-                                        minH="200px"
-                                        onDragOver={handleDragOver}
-                                        onDragLeave={handleDragLeave}
-                                        onDrop={(e) => handleDrop(e, 'column')}
-                                    >
-                                        {fields
-                                            .filter((f) => f.type === 'column')
-                                            .map((field, index) => (
-                                                <Badge
-                                                    key={`column-${index}`}
-                                                    m={1}
-                                                    p={2}
-                                                    cursor="pointer"
-                                                    onClick={() => removeField(fields.findIndex(f => f === field))}
-                                                >
-                                                    {field.field} ×
-                                                </Badge>
-                                            ))}
-                                    </Box>
-                                </VStack>
-                            </GridItem>
-
-                            {/* Values */}
-                            <GridItem>
-                                <VStack align="stretch" spacing={2}>
-                                    <Heading size="sm">Values</Heading>
-                                    <Box
-                                        ref={el => dropZonesRef.current['value'] = el}
-                                        p={4}
-                                        borderWidth={2}
-                                        borderStyle="dashed"
-                                        borderRadius="md"
-                                        minH="200px"
-                                        onDragOver={handleDragOver}
-                                        onDragLeave={handleDragLeave}
-                                        onDrop={(e) => handleDrop(e, 'value')}
-                                    >
-                                        {fields
-                                            .filter((f) => f.type === 'value')
-                                            .map((field, index) => (
-                                                <Badge
-                                                    key={`value-${index}`}
-                                                    m={1}
-                                                    p={2}
-                                                    cursor="pointer"
-                                                    onClick={() => removeField(fields.findIndex(f => f === field))}
-                                                >
-                                                    {field.field} ×
-                                                </Badge>
-                                            ))}
-                                    </Box>
-                                </VStack>
-                            </GridItem>
-
-                            {/* Filters */}
-                            <GridItem>
-                                <VStack align="stretch" spacing={2}>
-                                    <Heading size="sm">Filters</Heading>
-                                    <Box
-                                        ref={el => dropZonesRef.current['filter'] = el}
-                                        p={4}
-                                        borderWidth={2}
-                                        borderStyle="dashed"
-                                        borderRadius="md"
-                                        minH="200px"
-                                        onDragOver={handleDragOver}
-                                        onDragLeave={handleDragLeave}
-                                        onDrop={(e) => handleDrop(e, 'filter')}
-                                    >
-                                        {fields
-                                            .filter((f) => f.type === 'filter')
-                                            .map((field, index) => (
-                                                <Badge
-                                                    key={`filter-${index}`}
-                                                    m={1}
-                                                    p={2}
-                                                    cursor="pointer"
-                                                    onClick={() => removeField(fields.findIndex(f => f === field))}
-                                                >
-                                                    {field.field} {field.operator} {field.value} ×
-                                                </Badge>
-                                            ))}
-                                    </Box>
-                                </VStack>
-                            </GridItem>
-                        </Grid>
-
-                        <HStack spacing={4}>
-                            <Button
-                                colorScheme="blue"
-                                onClick={generatePivot}
-                                isLoading={isGenerating}
-                            >
-                                Generate Pivot
-                            </Button>
-                            <Button onClick={resetPivot}>Reset</Button>
-                            <Button
-                                colorScheme={isRelativePivot ? "green" : "gray"}
-                                onClick={() => {
-                                    setIsRelativePivot(!isRelativePivot);
-                                }}
-                            >
-                                {!isRelativePivot ? "Relative View" : "Normal View"}
-                            </Button>
-                        </HStack>
-
-                        {pivotHtml && (
+                <GridItem colStart={2} rowSpan={1} className="pivot-builder">
+                    <HStack align="stretch" spacing={4}>
+                        {/* Rows */} 
+                        <VStack align="stretch" flex="1" spacing={2}>
+                            <Heading size="sm">Rows</Heading>
                             <Box
-                                flex="1"
-                                borderWidth={1}
-                                borderRadius="md"
-                                overflow="auto"
+                                ref={el => dropZonesRef.current['row'] = el}
                                 p={4}
+                                borderWidth={2}
+                                borderStyle="dashed"
+                                borderRadius="md"
+                                minH="150px"
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, 'row')}
                             >
-                                <iframe
-                                    srcDoc={pivotHtml}
-                                    style={{
-                                        width: '100%',
-                                        height: '100%',
-                                    }}
-                                    sandbox="allow-same-origin"
-                                />
+                                {fields
+                                    .filter((f) => f.type === 'row')
+                                    .map((field, index) => (
+                                        <Badge
+                                            key={`row-${index}`}
+                                            m={1}
+                                            p={2}
+                                            cursor="pointer"
+                                            onClick={() => removeField(fields.findIndex(f => f === field))}
+                                        >
+                                            {field.field} ×
+                                        </Badge>
+                                    ))}
                             </Box>
-                        )}
-                    </VStack>
+                        </VStack>
+
+                        {/* Columns */}
+                        <VStack align="stretch" flex="1" spacing={2}>
+                            <Heading size="sm">Columns</Heading>
+                            <Box
+                                ref={el => dropZonesRef.current['column'] = el}
+                                p={4}
+                                borderWidth={2}
+                                borderStyle="dashed"
+                                borderRadius="md"
+                                minH="150px"
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, 'column')}
+                            >
+                                {fields
+                                    .filter((f) => f.type === 'column')
+                                    .map((field, index) => (
+                                        <Badge
+                                            key={`column-${index}`}
+                                            m={1}
+                                            p={2}
+                                            cursor="pointer"
+                                            onClick={() => removeField(fields.findIndex(f => f === field))}
+                                        >
+                                            {field.field} ×
+                                        </Badge>
+                                    ))}
+                            </Box>
+                        </VStack>
+
+                        <VStack align="stretch" flex="1"spacing={2}>
+                            <Heading size="sm">Values</Heading>
+                            <Box
+                                ref={el => dropZonesRef.current['value'] = el}
+                                p={4}
+                                borderWidth={2}
+                                borderStyle="dashed"
+                                borderRadius="md"
+                                minH="150px"
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, 'value')}
+                            >
+                                {fields
+                                    .filter((f) => f.type === 'value')
+                                    .map((field, index) => (
+                                        <Badge
+                                            key={`value-${index}`}
+                                            m={1}
+                                            p={2}
+                                            cursor="pointer"
+                                            onClick={() => removeField(fields.findIndex(f => f === field))}
+                                        >
+                                            {field.field} ×
+                                        </Badge>
+                                    ))}
+                            </Box>
+                        </VStack>
+
+                        <VStack align="stretch" flex="1" spacing={2}>
+                            <Heading size="sm">Filters</Heading>
+                            <Box
+                                ref={el => dropZonesRef.current['filter'] = el}
+                                p={4}
+                                borderWidth={2}
+                                borderStyle="dashed"
+                                borderRadius="md"
+                                minH="150px"
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, 'filter')}
+                            >
+                                {fields
+                                    .filter((f) => f.type === 'filter')
+                                    .map((field, index) => (
+                                        <Badge
+                                            key={`filter-${index}`}
+                                            m={1}
+                                            p={2}
+                                            cursor="pointer"
+                                            onClick={() => removeField(fields.findIndex(f => f === field))}
+                                        >
+                                            {field.field} {field.operator} {field.value} ×
+                                        </Badge>
+                                    ))}
+                            </Box>
+                        </VStack>
+                    </HStack>
+                </GridItem>
+                
+                <GridItem colStart={2} rowSpan={1} className="pivot-options">
+                    <HStack spacing={4} align="stretch" flex="1">
+                        <ButtonGroup size="sm" isAttached variant="outline">
+                            <Button
+                                colorScheme={viewMode === 'iframe' ? 'blue' : 'gray'}
+                                onClick={() => setViewMode('iframe')}
+                            >
+                                Iframe View
+                            </Button>
+                            <Button
+                                colorScheme={viewMode === 'table' ? 'blue' : 'gray'}
+                                onClick={() => setViewMode('table')}
+                            >
+                                Table View
+                            </Button>
+                        </ButtonGroup>
+                        <Button onClick={resetPivot}>Reset</Button>
+                        <Button
+                            colorScheme={isRelativePivot ? "green" : "gray"}
+                            onClick={() => {
+                                setIsRelativePivot(!isRelativePivot);
+                            }}
+                        >
+                            {!isRelativePivot ? "Relative View" : "Normal View"}
+                        </Button>
+                        <Button
+                            colorScheme="purple"
+                            onClick={updateURLParams}
+                            size="sm"
+                        >
+                            Update URL
+                        </Button>
+                    </HStack>
+                </GridItem>
+
+                <GridItem colStart={2} rowSpan={1} className="pivot-result" overflow="auto">
+                    {viewMode === 'iframe' ? (
+                        <PivotIframeView
+                            fields={fields}
+                            isRelativePivot={isRelativePivot}
+                            onFieldsChange={setFields}
+                        />
+                    ) : (
+                        <PivotTableView
+                            fields={fields}
+                            isRelativePivot={isRelativePivot}
+                            onFieldsChange={setFields}
+                        />
+                    )}
                 </GridItem>
             </Grid>
 

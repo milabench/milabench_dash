@@ -17,8 +17,10 @@ import {
     FormControl,
     FormLabel,
     HStack,
-    Select
+    Select,
+    Button
 } from '@chakra-ui/react';
+import { CopyIcon } from '@chakra-ui/icons';
 import axios from 'axios';
 
 interface FastReportViewProps {
@@ -160,6 +162,61 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
         setFilterType(value);
     };
 
+    const copyTableToClipboard = async () => {
+        try {
+            // Convert table data to CSV format
+            const columns = getAllKeys(filteredDataArray, columnPriority);
+            const csvHeader = columns.join(',');
+            const csvRows = filteredDataArray.map(row => {
+                return columns.map(column => {
+                    const value = (row as any)[column];
+                    return renderCellValue(value, column);
+                }).join(',');
+            });
+
+            const csvContent = [csvHeader, ...csvRows].join('\n');
+
+            await navigator.clipboard.writeText(csvContent);
+
+            toast({
+                title: 'Table copied to clipboard',
+                description: 'The table data has been copied as comma separated values',
+                status: 'success',
+                duration: 3000,
+            });
+        } catch (err) {
+            toast({
+                title: 'Failed to copy table',
+                description: 'Unable to copy table data to clipboard',
+                status: 'error',
+                duration: 3000,
+            });
+        }
+    };
+
+    const copyJsonToClipboard = async () => {
+        try {
+            // Copy raw JSON data
+            const jsonContent = JSON.stringify(reportData, null, 2);
+
+            await navigator.clipboard.writeText(jsonContent);
+
+            toast({
+                title: 'JSON copied to clipboard',
+                description: 'The raw JSON data has been copied to clipboard',
+                status: 'success',
+                duration: 3000,
+            });
+        } catch (err) {
+            toast({
+                title: 'Failed to copy JSON',
+                description: 'Unable to copy JSON data to clipboard',
+                status: 'error',
+                duration: 3000,
+            });
+        }
+    };
+
     if (isLoading) {
         return (
             <Box p={4}>
@@ -245,37 +302,58 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
 
                 <HStack spacing={4}>
                     <FormControl>
-                        <HStack justify="space-between">
-                            <FormLabel htmlFor="drop-min-max" fontSize="sm" mb={0}>
-                                Drop Min/Max Values
-                            </FormLabel>
-                            <Switch
-                                id="drop-min-max"
-                                isChecked={dropMinMax}
-                                onChange={(e) => handleDropMinMaxToggle(e.target.checked)}
-                                size="sm"
-                            />
+                        <HStack>
+                            <HStack borderWidth="1px" borderRadius="md" p={2}>
+                                <FormLabel htmlFor="drop-min-max" fontSize="sm" mb={0}>
+                                    Drop Min/Max Values
+                                </FormLabel>
+                                <Switch
+                                    id="drop-min-max"
+                                    isChecked={dropMinMax}
+                                    onChange={(e) => handleDropMinMaxToggle(e.target.checked)}
+                                    size="md"
+                                />
+                            </HStack>
+                            <HStack borderWidth="1px" borderRadius="md" p={2}>
+                                <FormLabel htmlFor="filter-type" fontSize="sm" mb={0}>
+                                    Filter
+                                </FormLabel>
+                                <Select
+                                    id="filter-type"
+                                    value={filterType}
+                                    onChange={(e) => handleFilterChange(e.target.value)}
+                                    size="xs"
+                                    width="150px"
+                                >
+                                    <option value="all">All Benches</option>
+                                    <option value="weight">Weight &gt; 0</option>
+                                    <option value="enabled">Enabled Only</option>
+                                </Select>
+                            </HStack>
+                            <HStack>
+                                <Button
+                                    size="sm"
+                                    leftIcon={<CopyIcon />}
+                                    onClick={copyTableToClipboard}
+                                    colorScheme="blue"
+                                    variant="outline"
+                                >
+                                    CSV
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    leftIcon={<CopyIcon />}
+                                    onClick={copyJsonToClipboard}
+                                    colorScheme="green"
+                                    variant="outline"
+                                >
+                                    JSON
+                                </Button>
+                            </HStack>
                         </HStack>
                     </FormControl>
 
-                    <FormControl>
-                        <HStack justify="space-between">
-                            <FormLabel htmlFor="filter-type" fontSize="sm" mb={0}>
-                                Filter
-                            </FormLabel>
-                            <Select
-                                id="filter-type"
-                                value={filterType}
-                                onChange={(e) => handleFilterChange(e.target.value)}
-                                size="sm"
-                                width="150px"
-                            >
-                                <option value="all">All Benches</option>
-                                <option value="weight">Weight &gt; 0</option>
-                                <option value="enabled">Enabled Only</option>
-                            </Select>
-                        </HStack>
-                    </FormControl>
+
                 </HStack>
 
                 <Box
@@ -312,7 +390,7 @@ export const FastReportView: React.FC<FastReportViewProps> = ({ executionId, onC
                                             {columns.map((column) => (
                                                 <Td key={column} fontSize="xs" px={2} py={2}>
                                                     <Text fontSize="xs" noOfLines={2}>
-                                                        {renderCellValue(row[column], column)}
+                                                        {renderCellValue((row as any)[column], column)}
                                                     </Text>
                                                 </Td>
                                             ))}
