@@ -23,6 +23,7 @@ interface PivotField {
     type: 'row' | 'column' | 'value' | 'filter';
     operator?: string;
     value?: string;
+    aggregators?: string[];  // For value fields - multiple aggregators
 }
 
 interface PivotTableViewProps {
@@ -46,11 +47,22 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
 
             const rows = fieldsToUse.filter(f => f.type === 'row').map(f => f.field);
             const cols = fieldsToUse.filter(f => f.type === 'column').map(f => f.field);
-            const values = fieldsToUse.filter(f => f.type === 'value').map(f => f.field);
+
+            // Handle values with aggregator functions
+            const valueFields = fieldsToUse.filter(f => f.type === 'value');
+            const valuesMap: { [key: string]: string[] } = {};
+
+            valueFields.forEach(field => {
+                const aggregators = field.aggregators || ['avg'];
+                if (!valuesMap[field.field]) {
+                    valuesMap[field.field] = [];
+                }
+                valuesMap[field.field].push(...aggregators);
+            });
 
             params.append('rows', rows.join(','));
             params.append('cols', cols.join(','));
-            params.append('values', values.join(','));
+            params.append('values', btoa(JSON.stringify(valuesMap)));
 
             const filters = fieldsToUse.filter(f => f.type === 'filter').map(f => ({
                 field: f.field,

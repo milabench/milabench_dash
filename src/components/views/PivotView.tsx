@@ -36,6 +36,19 @@ interface PivotField {
     type: 'row' | 'column' | 'value' | 'filter';
     operator?: string;
     value?: string;
+    aggregators?: string[];  // For value fields - multiple aggregators
+}
+
+// Add these interfaces for the edit modals
+interface EditableValue {
+    field: string;
+    aggregators: string[];
+}
+
+interface EditableFilter {
+    field: string;
+    operator: string;
+    value: string;
 }
 
 export const PivotView = () => {
@@ -49,7 +62,7 @@ export const PivotView = () => {
         { field: 'Exec:name', type: 'row' },
         { field: 'Pack:name', type: 'row' },
         { field: 'Metric:name', type: 'column' },
-        { field: 'Metric:value', type: 'value' },
+        { field: 'Metric:value', type: 'value', aggregators: ['avg'] },
     ]);
     const dropZonesRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
@@ -57,6 +70,26 @@ export const PivotView = () => {
     const { isOpen: isSaveModalOpen, onOpen: onSaveModalOpen, onClose: onSaveModalClose } = useDisclosure();
     const { isOpen: isLoadModalOpen, onOpen: onLoadModalOpen, onClose: onLoadModalClose } = useDisclosure();
     const [saveQueryName, setSaveQueryName] = useState<string>('');
+
+    // Edit modals state
+    const { isOpen: isEditValueOpen, onOpen: onEditValueOpen, onClose: onEditValueClose } = useDisclosure();
+    const { isOpen: isEditFilterOpen, onOpen: onEditFilterOpen, onClose: onEditFilterClose } = useDisclosure();
+    const [editingValueIndex, setEditingValueIndex] = useState<number>(-1);
+    const [editingFilterIndex, setEditingFilterIndex] = useState<number>(-1);
+    const [editableValue, setEditableValue] = useState<EditableValue>({ field: '', aggregators: ['avg'] });
+    const [editableFilter, setEditableFilter] = useState<EditableFilter>({ field: '', operator: '==', value: '' });
+
+    // Available aggregator functions
+    const aggregatorOptions = [
+        { value: 'avg', label: 'Average' },
+        { value: 'sum', label: 'Sum' },
+        { value: 'count', label: 'Count' },
+        { value: 'min', label: 'Minimum' },
+        { value: 'max', label: 'Maximum' },
+        { value: 'std', label: 'Standard Deviation' },
+        { value: 'var', label: 'Variance' },
+        { value: 'median', label: 'Median' },
+    ];
 
     // Fetch available fields from /api/keys
     const { data: availableFields } = useQuery({
@@ -96,9 +129,31 @@ export const PivotView = () => {
             }
 
             if (values) {
-                values.split(',').forEach(field => {
-                    newFields.push({ field, type: 'value' });
-                });
+                try {
+                    const decodedValues = JSON.parse(atob(values));
+                    if (Array.isArray(decodedValues)) {
+                        decodedValues.forEach((value: any) => {
+                            if (value.field) {
+                                newFields.push({
+                                    field: value.field,
+                                    type: 'value',
+                                    aggregators: value.aggregators || ['avg']
+                                });
+                            }
+                        });
+                    }
+                } catch (error) {
+                    // Fallback to old format (comma-separated string)
+                    values.split(',').forEach(field => {
+                        if (field.trim()) {
+                            newFields.push({
+                                field: field.trim(),
+                                type: 'value',
+                                aggregators: ['avg']
+                            });
+                        }
+                    });
+                }
             }
 
             if (filters) {
@@ -127,6 +182,9 @@ export const PivotView = () => {
         if (type === 'filter') {
             setSelectedField({ field, type });
             onOpen();
+        } else if (type === 'value') {
+            // Default aggregator for new value fields
+            setFields([...fields, { field, type, aggregators: ['avg'] }]);
         } else {
             setFields([...fields, { field, type }]);
         }
@@ -136,6 +194,52 @@ export const PivotView = () => {
         if (selectedField) {
             setFields([...fields, { ...selectedField, operator, value }]);
             onClose();
+        }
+    };
+
+    const handleEditValue = (index: number) => {
+        const field = fields[index];
+        setEditingValueIndex(index);
+        setEditableValue({
+            field: field.field,
+            aggregators: field.aggregators || ['avg']
+        });
+        onEditValueOpen();
+    };
+
+    const handleEditFilter = (index: number) => {
+        const field = fields[index];
+        setEditingFilterIndex(index);
+        setEditableFilter({
+            field: field.field,
+            operator: field.operator || '==',
+            value: field.value || ''
+        });
+        onEditFilterOpen();
+    };
+
+    const handleValueSave = () => {
+        if (editingValueIndex >= 0) {
+            const newFields = [...fields];
+            newFields[editingValueIndex] = {
+                ...newFields[editingValueIndex],
+                aggregators: editableValue.aggregators
+            };
+            setFields(newFields);
+            onEditValueClose();
+        }
+    };
+
+    const handleFilterSave = () => {
+        if (editingFilterIndex >= 0) {
+            const newFields = [...fields];
+            newFields[editingFilterIndex] = {
+                ...newFields[editingFilterIndex],
+                operator: editableFilter.operator,
+                value: editableFilter.value
+            };
+            setFields(newFields);
+            onEditFilterClose();
         }
     };
 
@@ -150,11 +254,14 @@ export const PivotView = () => {
 
         const rows = fields.filter(f => f.type === 'row').map(f => f.field);
         const cols = fields.filter(f => f.type === 'column').map(f => f.field);
-        const values = fields.filter(f => f.type === 'value').map(f => f.field);
+        const values = fields.filter(f => f.type === 'value').map(f => ({
+            field: f.field,
+            aggregators: f.aggregators || ['avg']
+        }));
 
         params.append('rows', rows.join(','));
         params.append('cols', cols.join(','));
-        params.append('values', values.join(','));
+        params.append('values', btoa(JSON.stringify(values)));
 
         const filters = fields.filter(f => f.type === 'filter').map(f => ({
             field: f.field,
@@ -175,7 +282,7 @@ export const PivotView = () => {
             { field: 'Exec:name', type: 'row' },
             { field: 'Pack:name', type: 'row' },
             { field: 'Metric:name', type: 'column' },
-            { field: 'Metric:value', type: 'value' },
+            { field: 'Metric:value', type: 'value', aggregators: ['avg'] },
         ]);
         setSearchParams(new URLSearchParams());
     };
@@ -225,7 +332,10 @@ export const PivotView = () => {
                 parameters: {
                     rows: fields.filter(f => f.type === 'row').map(f => f.field).join(','),
                     cols: fields.filter(f => f.type === 'column').map(f => f.field).join(','),
-                    values: fields.filter(f => f.type === 'value').map(f => f.field).join(','),
+                    values: btoa(JSON.stringify(fields.filter(f => f.type === 'value').map(f => ({
+                        field: f.field,
+                        aggregators: f.aggregators || ['avg']
+                    })))),
                     filters: fields.filter(f => f.type === 'filter').length > 0 ?
                         btoa(JSON.stringify(fields.filter(f => f.type === 'filter').map(f => ({
                             field: f.field,
@@ -285,11 +395,31 @@ export const PivotView = () => {
 
             // Load values
             if (parameters.values) {
-                parameters.values.split(',').forEach((field: string) => {
-                    if (field.trim()) {
-                        newFields.push({ field: field.trim(), type: 'value' });
+                try {
+                    const decodedValues = JSON.parse(atob(parameters.values));
+                    if (Array.isArray(decodedValues)) {
+                        decodedValues.forEach((value: any) => {
+                            if (value.field) {
+                                newFields.push({
+                                    field: value.field,
+                                    type: 'value',
+                                    aggregators: value.aggregators || ['avg']
+                                });
+                            }
+                        });
                     }
-                });
+                } catch (error) {
+                    // Fallback to old format (comma-separated string)
+                    parameters.values.split(',').forEach((field: string) => {
+                        if (field.trim()) {
+                            newFields.push({
+                                field: field.trim(),
+                                type: 'value',
+                                aggregators: ['avg']
+                            });
+                        }
+                    });
+                }
             }
 
             // Load filters
@@ -366,7 +496,7 @@ export const PivotView = () => {
                     <VStack align="stretch" spacing={4}>
                         <Heading size="md">Available Fields</Heading>
                         <Box
-                            h="calc(100vh - 170px)" 
+                            h="calc(100vh - 170px)"
                             overflowY="auto"
                         >
                             <VStack align="stretch" spacing={2}>
@@ -376,7 +506,7 @@ export const PivotView = () => {
                                         p={2}
                                         bg="white"
                                         borderWidth={1}
-                                        borderRadius="md" 
+                                        borderRadius="md"
                                         cursor="move"
                                         _hover={{ bg: 'gray.50' }}
                                         draggable
@@ -395,7 +525,7 @@ export const PivotView = () => {
 
                 <GridItem colStart={2} rowSpan={1} className="pivot-builder">
                     <HStack align="stretch" spacing={4}>
-                        {/* Rows */} 
+                        {/* Rows */}
                         <VStack align="stretch" flex="1" spacing={2}>
                             <Heading size="sm">Rows</Heading>
                             <Box
@@ -455,7 +585,7 @@ export const PivotView = () => {
                             </Box>
                         </VStack>
 
-                        <VStack align="stretch" flex="1"spacing={2}>
+                        <VStack align="stretch" flex="1" spacing={2}>
                             <Heading size="sm">Values</Heading>
                             <Box
                                 ref={el => dropZonesRef.current['value'] = el}
@@ -470,17 +600,45 @@ export const PivotView = () => {
                             >
                                 {fields
                                     .filter((f) => f.type === 'value')
-                                    .map((field, index) => (
-                                        <Badge
-                                            key={`value-${index}`}
-                                            m={1}
-                                            p={2}
-                                            cursor="pointer"
-                                            onClick={() => removeField(fields.findIndex(f => f === field))}
-                                        >
-                                            {field.field} ×
-                                        </Badge>
-                                    ))}
+                                    .map((field, index) => {
+                                        const fieldIndex = fields.findIndex(f => f === field);
+                                        return (
+                                            <VStack key={`value-${index}`} align="stretch" spacing={1} m={1}>
+                                                <HStack spacing={1}>
+                                                    <Badge
+                                                        colorScheme="blue"
+                                                        cursor="pointer"
+                                                        onClick={() => handleEditValue(fieldIndex)}
+                                                        _hover={{ bg: 'blue.200' }}
+                                                        px={2}
+                                                        py={1}
+                                                    >
+                                                        Edit {field.field}
+                                                    </Badge>
+                                                    <Badge
+                                                        colorScheme="red"
+                                                        cursor="pointer"
+                                                        onClick={() => removeField(fieldIndex)}
+                                                        _hover={{ bg: 'red.200' }}
+                                                    >
+                                                        ×
+                                                    </Badge>
+                                                </HStack>
+                                                <HStack spacing={1} flexWrap="wrap">
+                                                    {(field.aggregators || ['avg']).map((aggregator, aggIndex) => (
+                                                        <Badge
+                                                            key={`${field.field}-${aggregator}-${aggIndex}`}
+                                                            colorScheme="purple"
+                                                            variant="outline"
+                                                            fontSize="xs"
+                                                        >
+                                                            {aggregator.toUpperCase()}({field.field})
+                                                        </Badge>
+                                                    ))}
+                                                </HStack>
+                                            </VStack>
+                                        );
+                                    })}
                             </Box>
                         </VStack>
 
@@ -499,22 +657,34 @@ export const PivotView = () => {
                             >
                                 {fields
                                     .filter((f) => f.type === 'filter')
-                                    .map((field, index) => (
-                                        <Badge
-                                            key={`filter-${index}`}
-                                            m={1}
-                                            p={2}
-                                            cursor="pointer"
-                                            onClick={() => removeField(fields.findIndex(f => f === field))}
-                                        >
-                                            {field.field} {field.operator} {field.value} ×
-                                        </Badge>
-                                    ))}
+                                    .map((field, index) => {
+                                        const fieldIndex = fields.findIndex(f => f === field);
+                                        return (
+                                            <HStack key={`filter-${index}`} m={1}>
+                                                <Badge
+                                                    colorScheme="purple"
+                                                    cursor="pointer"
+                                                    onClick={() => handleEditFilter(fieldIndex)}
+                                                    _hover={{ bg: 'purple.200' }}
+                                                >
+                                                    {field.field} {field.operator} {field.value}
+                                                </Badge>
+                                                <Badge
+                                                    colorScheme="red"
+                                                    cursor="pointer"
+                                                    onClick={() => removeField(fieldIndex)}
+                                                    _hover={{ bg: 'red.200' }}
+                                                >
+                                                    ×
+                                                </Badge>
+                                            </HStack>
+                                        );
+                                    })}
                             </Box>
                         </VStack>
                     </HStack>
                 </GridItem>
-                
+
                 <GridItem colStart={2} rowSpan={1} className="pivot-options">
                     <HStack spacing={4} align="stretch" flex="1">
                         <ButtonGroup size="sm" isAttached variant="outline">
@@ -687,6 +857,139 @@ export const PivotView = () => {
                                     No saved pivot queries found. Save queries from this view to see them here.
                                 </Text>
                             )}
+                        </VStack>
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
+
+            {/* Edit Value Modal */}
+            <Modal isOpen={isEditValueOpen} onClose={onEditValueClose}>
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>Edit Value Field</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={6}>
+                        <VStack spacing={4}>
+                            <FormControl>
+                                <FormLabel>Field</FormLabel>
+                                <Input
+                                    value={editableValue.field}
+                                    isDisabled
+                                    bg="gray.100"
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel>Aggregator Functions</FormLabel>
+                                <VStack spacing={2} align="stretch">
+                                    {editableValue.aggregators.map((aggregator, index) => (
+                                        <HStack key={index} spacing={2}>
+                                            <Select
+                                                value={aggregator}
+                                                onChange={(e) => {
+                                                    const newAggregators = [...editableValue.aggregators];
+                                                    newAggregators[index] = e.target.value;
+                                                    setEditableValue({ ...editableValue, aggregators: newAggregators });
+                                                }}
+                                                flex="1"
+                                            >
+                                                {aggregatorOptions.map((option) => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </Select>
+                                            <Button
+                                                colorScheme="red"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const newAggregators = [...editableValue.aggregators];
+                                                    newAggregators.splice(index, 1);
+                                                    setEditableValue({ ...editableValue, aggregators: newAggregators });
+                                                }}
+                                                disabled={editableValue.aggregators.length === 1}
+                                            >
+                                                ×
+                                            </Button>
+                                        </HStack>
+                                    ))}
+                                    <Button
+                                        colorScheme="green"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            const newAggregators = [...editableValue.aggregators, 'avg'];
+                                            setEditableValue({ ...editableValue, aggregators: newAggregators });
+                                        }}
+                                    >
+                                        + Add Aggregator
+                                    </Button>
+                                </VStack>
+                            </FormControl>
+                            <HStack spacing={4} width="100%">
+                                <Button colorScheme="blue" onClick={handleValueSave} width="100%">
+                                    Save
+                                </Button>
+                                <Button onClick={onEditValueClose} width="100%">
+                                    Cancel
+                                </Button>
+                            </HStack>
+                        </VStack>
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
+
+            {/* Edit Filter Modal */}
+            <Modal isOpen={isEditFilterOpen} onClose={onEditFilterClose}>
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>Edit Filter</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={6}>
+                        <VStack spacing={4}>
+                            <FormControl>
+                                <FormLabel>Field</FormLabel>
+                                <Input
+                                    value={editableFilter.field}
+                                    isDisabled
+                                    bg="gray.100"
+                                />
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel>Operator</FormLabel>
+                                <Select
+                                    value={editableFilter.operator}
+                                    onChange={(e) => setEditableFilter({ ...editableFilter, operator: e.target.value })}
+                                >
+                                    <option value="==">Equals (==)</option>
+                                    <option value="!=">Not Equals (!=)</option>
+                                    <option value=">">Greater Than (&gt;)</option>
+                                    <option value=">=">Greater Than or Equal (&gt;=)</option>
+                                    <option value="<">Less Than (&lt;)</option>
+                                    <option value="<=">Less Than or Equal (&lt;=)</option>
+                                    <option value="in">In List (in)</option>
+                                    <option value="not in">Not In List (not in)</option>
+                                    <option value="like">Like</option>
+                                    <option value="not like">Not Like</option>
+                                    <option value="is">Is</option>
+                                    <option value="is not">Is Not</option>
+                                </Select>
+                            </FormControl>
+                            <FormControl>
+                                <FormLabel>Value</FormLabel>
+                                <Input
+                                    value={editableFilter.value}
+                                    onChange={(e) => setEditableFilter({ ...editableFilter, value: e.target.value })}
+                                    placeholder="Enter filter value"
+                                />
+                            </FormControl>
+                            <HStack spacing={4} width="100%">
+                                <Button colorScheme="blue" onClick={handleFilterSave} width="100%">
+                                    Save
+                                </Button>
+                                <Button onClick={onEditFilterClose} width="100%">
+                                    Cancel
+                                </Button>
+                            </HStack>
                         </VStack>
                     </ModalBody>
                 </ModalContent>
