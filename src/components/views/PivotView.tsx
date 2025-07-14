@@ -290,8 +290,30 @@ export const PivotView = () => {
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
         const target = e.currentTarget as HTMLDivElement;
-        target.style.backgroundColor = 'var(--chakra-colors-blue-50)';
-        target.style.borderColor = 'var(--chakra-colors-blue-400)';
+        const dropZone = target.getAttribute('data-drop-zone');
+
+        switch (dropZone) {
+            case 'row':
+                target.style.backgroundColor = 'var(--chakra-colors-blue-100)';
+                target.style.borderColor = 'var(--chakra-colors-blue-400)';
+                break;
+            case 'column':
+                target.style.backgroundColor = 'var(--chakra-colors-green-100)';
+                target.style.borderColor = 'var(--chakra-colors-green-400)';
+                break;
+            case 'value':
+                target.style.backgroundColor = 'var(--chakra-colors-purple-100)';
+                target.style.borderColor = 'var(--chakra-colors-purple-400)';
+                break;
+            case 'filter':
+                target.style.backgroundColor = 'var(--chakra-colors-orange-100)';
+                target.style.borderColor = 'var(--chakra-colors-orange-400)';
+                break;
+            default:
+                target.style.backgroundColor = 'var(--chakra-colors-blue-100)';
+                target.style.borderColor = 'var(--chakra-colors-blue-400)';
+        }
+
         target.style.transform = 'scale(1.02)';
         target.style.transition = 'all 0.2s';
     };
@@ -310,9 +332,183 @@ export const PivotView = () => {
         target.style.backgroundColor = '';
         target.style.borderColor = '';
         target.style.transform = '';
-        const field = e.dataTransfer.getData('text/plain');
-        handleFieldDrop(type, field);
+
+        const draggedData = e.dataTransfer.getData('text/plain');
+
+        // Check if we're reordering an existing field
+        const reorderData = e.dataTransfer.getData('application/json');
+        if (reorderData) {
+            try {
+                const { fieldIndex, sourceType } = JSON.parse(reorderData);
+                handleFieldReorder(fieldIndex, sourceType, type);
+            } catch (error) {
+                console.error('Error parsing reorder data:', error);
+            }
+        } else {
+            // Adding a new field
+            handleFieldDrop(type, draggedData);
+        }
     };
+
+    const handleFieldReorder = (sourceIndex: number, sourceType: string, targetType: string) => {
+        const newFields = [...fields];
+        const sourceField = newFields[sourceIndex];
+
+        if (sourceType === targetType) {
+            // Reordering within the same type - move to end of the type group
+            newFields.splice(sourceIndex, 1);
+
+            // Find the position to insert at the end of the same type group
+            const sameTypeFields = newFields.filter(f => f.type === targetType);
+            const firstSameTypeIndex = newFields.findIndex(f => f.type === targetType);
+
+            if (firstSameTypeIndex === -1) {
+                // No other fields of this type, add at the end
+                newFields.push(sourceField);
+            } else {
+                // Find the last position of this type
+                let lastSameTypeIndex = firstSameTypeIndex;
+                for (let i = firstSameTypeIndex; i < newFields.length; i++) {
+                    if (newFields[i].type === targetType) {
+                        lastSameTypeIndex = i;
+                    } else {
+                        break;
+                    }
+                }
+                newFields.splice(lastSameTypeIndex + 1, 0, sourceField);
+            }
+
+            setFields(newFields);
+        } else {
+            // Moving to a different type - remove from source and add to target
+            newFields.splice(sourceIndex, 1);
+            const updatedField = { ...sourceField, type: targetType as 'row' | 'column' | 'value' | 'filter' };
+
+            if (targetType === 'filter') {
+                // Handle filter fields specially
+                setSelectedField(updatedField);
+                setFields(newFields); // Update fields to remove the original
+                onOpen();
+                return;
+            } else if (targetType === 'value' && !updatedField.aggregators) {
+                // Add default aggregator for value fields
+                updatedField.aggregators = ['avg'];
+            }
+
+            newFields.push(updatedField);
+            setFields(newFields);
+        }
+    };
+
+    const handleFieldDragStart = (e: React.DragEvent, fieldIndex: number, fieldType: string) => {
+        e.dataTransfer.setData('application/json', JSON.stringify({
+            fieldIndex,
+            sourceType: fieldType
+        }));
+
+        // Add visual feedback
+        const target = e.currentTarget as HTMLElement;
+        target.style.opacity = '0.5';
+        target.style.transform = 'scale(0.95)';
+    };
+
+    const handleFieldDragEnd = (e: React.DragEvent) => {
+        const target = e.currentTarget as HTMLElement;
+        target.style.opacity = '1';
+        target.style.transform = 'scale(1)';
+    };
+
+    // Add a function to handle reordering within the same zone
+    const handleIntraZoneReorder = (sourceIndex: number, targetIndex: number, zoneType: string) => {
+        const newFields = [...fields];
+        const sourceField = newFields[sourceIndex];
+
+        // Remove the source field
+        newFields.splice(sourceIndex, 1);
+
+        // Adjust target index if it's after the source
+        const adjustedTargetIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
+
+        // Insert at the new position
+        newFields.splice(adjustedTargetIndex, 0, sourceField);
+
+        setFields(newFields);
+    };
+
+    // Add drop zones between fields for precise positioning
+    const handleFieldDropZone = (e: React.DragEvent, beforeIndex: number, zoneType: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const target = e.currentTarget as HTMLElement;
+        target.style.backgroundColor = '';
+        target.style.borderTop = '';
+
+        const reorderData = e.dataTransfer.getData('application/json');
+        if (reorderData) {
+            try {
+                const { fieldIndex, sourceType } = JSON.parse(reorderData);
+
+                if (sourceType === zoneType) {
+                    // Reordering within the same zone - use precise positioning
+                    handlePreciseReorder(fieldIndex, beforeIndex, zoneType);
+                } else {
+                    // Moving between different zones
+                    handleFieldReorder(fieldIndex, sourceType, zoneType);
+                }
+            } catch (error) {
+                console.error('Error parsing reorder data:', error);
+            }
+        }
+    };
+
+    const handlePreciseReorder = (sourceIndex: number, beforeIndex: number, zoneType: string) => {
+        const newFields = [...fields];
+        const sourceField = newFields[sourceIndex];
+
+        // Remove source field
+        newFields.splice(sourceIndex, 1);
+
+        // Get fields of the same type in their current order
+        const sameTypeIndices: number[] = [];
+        newFields.forEach((field, index) => {
+            if (field.type === zoneType) {
+                sameTypeIndices.push(index);
+            }
+        });
+
+        // Determine insertion position
+        let insertIndex;
+        if (beforeIndex === -1 || beforeIndex >= sameTypeIndices.length) {
+            // Insert at the end of the zone
+            insertIndex = sameTypeIndices.length > 0 ? sameTypeIndices[sameTypeIndices.length - 1] + 1 : newFields.length;
+        } else {
+            // Adjust the beforeIndex based on the removal
+            const adjustedBeforeIndex = beforeIndex;
+            insertIndex = sameTypeIndices[adjustedBeforeIndex] || newFields.length;
+        }
+
+        // Insert the field at the new position
+        newFields.splice(insertIndex, 0, sourceField);
+        setFields(newFields);
+    };
+
+    const handleFieldDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const target = e.currentTarget as HTMLElement;
+        target.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+        target.style.borderTop = '2px solid #3b82f6';
+    };
+
+    const handleFieldDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        const target = e.currentTarget as HTMLElement;
+        target.style.backgroundColor = '';
+        target.style.borderTop = '';
+    };
+
+
 
     const handleSaveQuery = async () => {
         if (!saveQueryName.trim()) {
@@ -494,26 +690,41 @@ export const PivotView = () => {
                 {/* Fields Panel */}
                 <GridItem rowSpan={3} colSpan={1} className="pivot-fields">
                     <VStack align="stretch" spacing={4}>
-                        <Heading size="md">Available Fields</Heading>
+                        <Heading size="md" color="gray.700">Available Fields</Heading>
                         <Box
                             h="calc(100vh - 170px)"
                             overflowY="auto"
+                            bg="gray.50"
+                            borderRadius="md"
+                            p={3}
+                            borderWidth={1}
+                            borderColor="gray.200"
                         >
                             <VStack align="stretch" spacing={2}>
                                 {availableFields?.map((field: string) => (
                                     <Box
                                         key={field}
-                                        p={2}
+                                        p={3}
                                         bg="white"
                                         borderWidth={1}
+                                        borderColor="gray.200"
                                         borderRadius="md"
                                         cursor="move"
-                                        _hover={{ bg: 'gray.50' }}
+                                        _hover={{
+                                            bg: 'gray.50',
+                                            borderColor: 'gray.300',
+                                            transform: 'translateY(-1px)',
+                                            boxShadow: 'sm'
+                                        }}
+                                        transition="all 0.2s"
                                         draggable
                                         onDragStart={(e) => e.dataTransfer.setData('text/plain', field)}
                                         overflowX="hidden"
                                         textOverflow="ellipsis"
                                         whiteSpace="nowrap"
+                                        fontSize="sm"
+                                        fontWeight="medium"
+                                        color="gray.700"
                                     >
                                         {field}
                                     </Box>
@@ -527,159 +738,410 @@ export const PivotView = () => {
                     <HStack align="stretch" spacing={4}>
                         {/* Rows */}
                         <VStack align="stretch" flex="1" spacing={2}>
-                            <Heading size="sm">Rows</Heading>
+                            <Heading size="sm" color="blue.600">Rows</Heading>
                             <Box
                                 ref={el => dropZonesRef.current['row'] = el}
                                 p={4}
+                                bg="blue.50"
                                 borderWidth={2}
                                 borderStyle="dashed"
+                                borderColor="blue.200"
                                 borderRadius="md"
                                 minH="150px"
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={(e) => handleDrop(e, 'row')}
+                                _hover={{
+                                    borderColor: 'blue.300'
+                                }}
+                                transition="all 0.2s"
+                                data-drop-zone="row"
                             >
                                 {fields
                                     .filter((f) => f.type === 'row')
-                                    .map((field, index) => (
-                                        <Badge
-                                            key={`row-${index}`}
-                                            m={1}
-                                            p={2}
-                                            cursor="pointer"
-                                            onClick={() => removeField(fields.findIndex(f => f === field))}
-                                        >
-                                            {field.field} ×
-                                        </Badge>
-                                    ))}
+                                    .map((field, index) => {
+                                        const globalIndex = fields.findIndex(f => f === field);
+                                        return (
+                                            <HStack key={`row-${index}`} align="center" spacing={0}>
+                                                {/* Drop zone before field */}
+                                                <Box
+                                                    w={2}
+                                                    h="20px"
+                                                    onDragOver={handleFieldDragOver}
+                                                    onDragLeave={handleFieldDragLeave}
+                                                    onDrop={(e) => handleFieldDropZone(e, index, 'row')}
+                                                    cursor="pointer"
+                                                />
+                                                <Badge
+                                                    m={1}
+                                                    p={2}
+                                                    px={3}
+                                                    colorScheme="blue"
+                                                    variant="solid"
+                                                    cursor="move"
+                                                    draggable
+                                                    onClick={() => removeField(globalIndex)}
+                                                    _hover={{
+                                                        bg: 'blue.600',
+                                                        transform: 'scale(1.05)'
+                                                    }}
+                                                    transition="all 0.2s"
+                                                    borderRadius="full"
+                                                    onDragStart={(e) => handleFieldDragStart(e, globalIndex, 'row')}
+                                                    onDragEnd={handleFieldDragEnd}
+                                                >
+                                                    {field.field} ×
+                                                </Badge>
+                                                {/* Drop zone after last field */}
+                                                {index === fields.filter((f) => f.type === 'row').length - 1 && (
+                                                    <Box
+                                                        w={2}
+                                                        h="20px"
+                                                        onDragOver={handleFieldDragOver}
+                                                        onDragLeave={handleFieldDragLeave}
+                                                        onDrop={(e) => handleFieldDropZone(e, index + 1, 'row')}
+                                                        cursor="pointer"
+                                                    />
+                                                )}
+                                            </HStack>
+                                        );
+                                    })}
+                                {fields.filter((f) => f.type === 'row').length === 0 && (
+                                    <Text color="blue.400" fontSize="sm" textAlign="center" mt={8}>
+                                        Drop row fields here
+                                    </Text>
+                                )}
                             </Box>
                         </VStack>
 
                         {/* Columns */}
                         <VStack align="stretch" flex="1" spacing={2}>
-                            <Heading size="sm">Columns</Heading>
+                            <Heading size="sm" color="green.600">Columns</Heading>
                             <Box
                                 ref={el => dropZonesRef.current['column'] = el}
                                 p={4}
+                                bg="green.50"
                                 borderWidth={2}
                                 borderStyle="dashed"
+                                borderColor="green.200"
                                 borderRadius="md"
                                 minH="150px"
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={(e) => handleDrop(e, 'column')}
+                                _hover={{
+                                    borderColor: 'green.300'
+                                }}
+                                transition="all 0.2s"
+                                data-drop-zone="column"
                             >
                                 {fields
                                     .filter((f) => f.type === 'column')
-                                    .map((field, index) => (
-                                        <Badge
-                                            key={`column-${index}`}
-                                            m={1}
-                                            p={2}
-                                            cursor="pointer"
-                                            onClick={() => removeField(fields.findIndex(f => f === field))}
-                                        >
-                                            {field.field} ×
-                                        </Badge>
-                                    ))}
+                                    .map((field, index) => {
+                                        const globalIndex = fields.findIndex(f => f === field);
+                                        return (
+                                            <HStack key={`column-${index}`} align="center" spacing={0}>
+                                                {/* Drop zone before field */}
+                                                <Box
+                                                    w={2}
+                                                    h="20px"
+                                                    onDragOver={handleFieldDragOver}
+                                                    onDragLeave={handleFieldDragLeave}
+                                                    onDrop={(e) => handleFieldDropZone(e, index, 'column')}
+                                                    cursor="pointer"
+                                                />
+                                                <Badge
+                                                    m={1}
+                                                    p={2}
+                                                    px={3}
+                                                    colorScheme="green"
+                                                    variant="solid"
+                                                    cursor="move"
+                                                    draggable
+                                                    onClick={() => removeField(globalIndex)}
+                                                    _hover={{
+                                                        bg: 'green.600',
+                                                        transform: 'scale(1.05)'
+                                                    }}
+                                                    transition="all 0.2s"
+                                                    borderRadius="full"
+                                                    onDragStart={(e) => handleFieldDragStart(e, globalIndex, 'column')}
+                                                    onDragEnd={handleFieldDragEnd}
+                                                >
+                                                    {field.field} ×
+                                                </Badge>
+                                                {/* Drop zone after last field */}
+                                                {index === fields.filter((f) => f.type === 'column').length - 1 && (
+                                                    <Box
+                                                        w={2}
+                                                        h="20px"
+                                                        onDragOver={handleFieldDragOver}
+                                                        onDragLeave={handleFieldDragLeave}
+                                                        onDrop={(e) => handleFieldDropZone(e, index + 1, 'column')}
+                                                        cursor="pointer"
+                                                    />
+                                                )}
+                                            </HStack>
+                                        );
+                                    })}
+                                {fields.filter((f) => f.type === 'column').length === 0 && (
+                                    <Text color="green.400" fontSize="sm" textAlign="center" mt={8}>
+                                        Drop column fields here
+                                    </Text>
+                                )}
                             </Box>
                         </VStack>
 
                         <VStack align="stretch" flex="1" spacing={2}>
-                            <Heading size="sm">Values</Heading>
+                            <Heading size="sm" color="purple.600">Values</Heading>
                             <Box
                                 ref={el => dropZonesRef.current['value'] = el}
                                 p={4}
+                                bg="purple.50"
                                 borderWidth={2}
                                 borderStyle="dashed"
+                                borderColor="purple.200"
                                 borderRadius="md"
                                 minH="150px"
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={(e) => handleDrop(e, 'value')}
+                                _hover={{
+                                    borderColor: 'purple.300'
+                                }}
+                                transition="all 0.2s"
+                                data-drop-zone="value"
                             >
                                 {fields
                                     .filter((f) => f.type === 'value')
                                     .map((field, index) => {
                                         const fieldIndex = fields.findIndex(f => f === field);
                                         return (
-                                            <VStack key={`value-${index}`} align="stretch" spacing={1} m={1}>
-                                                <HStack spacing={1}>
-                                                    <Badge
-                                                        colorScheme="blue"
+                                            <VStack key={`value-${index}`} align="stretch" spacing={0}>
+                                                {/* Drop zone before field */}
+                                                <Box
+                                                    w="100%"
+                                                    h={2}
+                                                    onDragOver={handleFieldDragOver}
+                                                    onDragLeave={handleFieldDragLeave}
+                                                    onDrop={(e) => handleFieldDropZone(e, index, 'value')}
+                                                    cursor="pointer"
+                                                />
+                                                <Box
+                                                    m={1}
+                                                    p={2}
+                                                    bg="white"
+                                                    borderRadius="md"
+                                                    borderWidth={1}
+                                                    borderColor="purple.200"
+                                                    cursor="move"
+                                                    draggable
+                                                    _hover={{
+                                                        borderColor: 'purple.300',
+                                                        bg: 'purple.25'
+                                                    }}
+                                                    transition="all 0.2s"
+                                                    onDragStart={(e) => handleFieldDragStart(e, fieldIndex, 'value')}
+                                                    onDragEnd={handleFieldDragEnd}
+                                                >
+                                                    <VStack align="stretch" spacing={2}>
+                                                        <HStack spacing={2} justify="space-between">
+                                                            <Badge
+                                                                colorScheme="purple"
+                                                                variant="solid"
+                                                                cursor="pointer"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleEditValue(fieldIndex);
+                                                                }}
+                                                                _hover={{
+                                                                    bg: 'purple.600',
+                                                                    transform: 'scale(1.05)'
+                                                                }}
+                                                                transition="all 0.2s"
+                                                                px={3}
+                                                                py={1}
+                                                                borderRadius="full"
+                                                            >
+                                                                📝 {field.field}
+                                                            </Badge>
+                                                            <Badge
+                                                                colorScheme="red"
+                                                                variant="solid"
+                                                                cursor="pointer"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    removeField(fieldIndex);
+                                                                }}
+                                                                _hover={{
+                                                                    bg: 'red.600',
+                                                                    transform: 'scale(1.05)'
+                                                                }}
+                                                                transition="all 0.2s"
+                                                                borderRadius="full"
+                                                                w={6}
+                                                                h={6}
+                                                                display="flex"
+                                                                alignItems="center"
+                                                                justifyContent="center"
+                                                            >
+                                                                ×
+                                                            </Badge>
+                                                        </HStack>
+                                                        <HStack spacing={1} flexWrap="wrap">
+                                                            {(field.aggregators || ['avg']).map((aggregator, aggIndex) => (
+                                                                <Badge
+                                                                    key={`${field.field}-${aggregator}-${aggIndex}`}
+                                                                    colorScheme="purple"
+                                                                    variant="outline"
+                                                                    fontSize="xs"
+                                                                    px={2}
+                                                                    py={1}
+                                                                    borderRadius="full"
+                                                                >
+                                                                    {aggregator.toUpperCase()}
+                                                                </Badge>
+                                                            ))}
+                                                        </HStack>
+                                                    </VStack>
+                                                </Box>
+                                                {/* Drop zone after last field */}
+                                                {index === fields.filter((f) => f.type === 'value').length - 1 && (
+                                                    <Box
+                                                        w="100%"
+                                                        h={2}
+                                                        onDragOver={handleFieldDragOver}
+                                                        onDragLeave={handleFieldDragLeave}
+                                                        onDrop={(e) => handleFieldDropZone(e, index + 1, 'value')}
                                                         cursor="pointer"
-                                                        onClick={() => handleEditValue(fieldIndex)}
-                                                        _hover={{ bg: 'blue.200' }}
-                                                        px={2}
-                                                        py={1}
-                                                    >
-                                                        Edit {field.field}
-                                                    </Badge>
-                                                    <Badge
-                                                        colorScheme="red"
-                                                        cursor="pointer"
-                                                        onClick={() => removeField(fieldIndex)}
-                                                        _hover={{ bg: 'red.200' }}
-                                                    >
-                                                        ×
-                                                    </Badge>
-                                                </HStack>
-                                                <HStack spacing={1} flexWrap="wrap">
-                                                    {(field.aggregators || ['avg']).map((aggregator, aggIndex) => (
-                                                        <Badge
-                                                            key={`${field.field}-${aggregator}-${aggIndex}`}
-                                                            colorScheme="purple"
-                                                            variant="outline"
-                                                            fontSize="xs"
-                                                        >
-                                                            {aggregator.toUpperCase()}({field.field})
-                                                        </Badge>
-                                                    ))}
-                                                </HStack>
+                                                    />
+                                                )}
                                             </VStack>
                                         );
                                     })}
+                                {fields.filter((f) => f.type === 'value').length === 0 && (
+                                    <Text color="purple.400" fontSize="sm" textAlign="center" mt={8}>
+                                        Drop value fields here
+                                    </Text>
+                                )}
                             </Box>
                         </VStack>
 
                         <VStack align="stretch" flex="1" spacing={2}>
-                            <Heading size="sm">Filters</Heading>
+                            <Heading size="sm" color="orange.600">Filters</Heading>
                             <Box
                                 ref={el => dropZonesRef.current['filter'] = el}
                                 p={4}
+                                bg="orange.50"
                                 borderWidth={2}
                                 borderStyle="dashed"
+                                borderColor="orange.200"
                                 borderRadius="md"
                                 minH="150px"
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={(e) => handleDrop(e, 'filter')}
+                                _hover={{
+                                    borderColor: 'orange.300'
+                                }}
+                                transition="all 0.2s"
+                                data-drop-zone="filter"
                             >
                                 {fields
                                     .filter((f) => f.type === 'filter')
                                     .map((field, index) => {
                                         const fieldIndex = fields.findIndex(f => f === field);
                                         return (
-                                            <HStack key={`filter-${index}`} m={1}>
-                                                <Badge
-                                                    colorScheme="purple"
+                                            <VStack key={`filter-${index}`} align="stretch" spacing={0}>
+                                                {/* Drop zone before field */}
+                                                <Box
+                                                    w="100%"
+                                                    h={2}
+                                                    onDragOver={handleFieldDragOver}
+                                                    onDragLeave={handleFieldDragLeave}
+                                                    onDrop={(e) => handleFieldDropZone(e, index, 'filter')}
                                                     cursor="pointer"
-                                                    onClick={() => handleEditFilter(fieldIndex)}
-                                                    _hover={{ bg: 'purple.200' }}
+                                                />
+                                                <Box
+                                                    m={1}
+                                                    p={2}
+                                                    bg="white"
+                                                    borderRadius="md"
+                                                    borderWidth={1}
+                                                    borderColor="orange.200"
+                                                    cursor="move"
+                                                    draggable
+                                                    _hover={{
+                                                        borderColor: 'orange.300',
+                                                        bg: 'orange.25'
+                                                    }}
+                                                    transition="all 0.2s"
+                                                    onDragStart={(e) => handleFieldDragStart(e, fieldIndex, 'filter')}
+                                                    onDragEnd={handleFieldDragEnd}
                                                 >
-                                                    {field.field} {field.operator} {field.value}
-                                                </Badge>
-                                                <Badge
-                                                    colorScheme="red"
-                                                    cursor="pointer"
-                                                    onClick={() => removeField(fieldIndex)}
-                                                    _hover={{ bg: 'red.200' }}
-                                                >
-                                                    ×
-                                                </Badge>
-                                            </HStack>
+                                                    <HStack spacing={2} justify="space-between">
+                                                        <Badge
+                                                            colorScheme="orange"
+                                                            variant="solid"
+                                                            cursor="pointer"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleEditFilter(fieldIndex);
+                                                            }}
+                                                            _hover={{
+                                                                bg: 'orange.600',
+                                                                transform: 'scale(1.05)'
+                                                            }}
+                                                            transition="all 0.2s"
+                                                            px={3}
+                                                            py={1}
+                                                            borderRadius="full"
+                                                        >
+                                                            🔍 {field.field} {field.operator} {field.value}
+                                                        </Badge>
+                                                        <Badge
+                                                            colorScheme="red"
+                                                            variant="solid"
+                                                            cursor="pointer"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                removeField(fieldIndex);
+                                                            }}
+                                                            _hover={{
+                                                                bg: 'red.600',
+                                                                transform: 'scale(1.05)'
+                                                            }}
+                                                            transition="all 0.2s"
+                                                            borderRadius="full"
+                                                            w={6}
+                                                            h={6}
+                                                            display="flex"
+                                                            alignItems="center"
+                                                            justifyContent="center"
+                                                        >
+                                                            ×
+                                                        </Badge>
+                                                    </HStack>
+                                                </Box>
+                                                {/* Drop zone after last field */}
+                                                {index === fields.filter((f) => f.type === 'filter').length - 1 && (
+                                                    <Box
+                                                        w="100%"
+                                                        h={2}
+                                                        onDragOver={handleFieldDragOver}
+                                                        onDragLeave={handleFieldDragLeave}
+                                                        onDrop={(e) => handleFieldDropZone(e, index + 1, 'filter')}
+                                                        cursor="pointer"
+                                                    />
+                                                )}
+                                            </VStack>
                                         );
                                     })}
+                                {fields.filter((f) => f.type === 'filter').length === 0 && (
+                                    <Text color="orange.400" fontSize="sm" textAlign="center" mt={8}>
+                                        Drop filter fields here
+                                    </Text>
+                                )}
                             </Box>
                         </VStack>
                     </HStack>
