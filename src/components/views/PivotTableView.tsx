@@ -495,13 +495,13 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                                                         py={3}
                                                         borderWidth={1}
                                                         borderColor="gray.200"
-                                                        bg="blue.100"
-                                                        color="blue.800"
+                                                        bg={fieldRow.name === 'Aggregator' ? 'purple.100' : 'green.100'}
+                                                        color={fieldRow.name === 'Aggregator' ? 'purple.800' : 'green.800'}
                                                         fontWeight="semibold"
                                                         textAlign="left"
                                                         minW="140px"
                                                         borderRightWidth={2}
-                                                        borderRightColor="blue.200"
+                                                        borderRightColor={fieldRow.name === 'Aggregator' ? 'purple.200' : 'green.200'}
                                                     >
                                                         {fieldRow.name}
                                                     </Th>
@@ -517,16 +517,16 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                                                             borderWidth={1}
                                                             borderColor="gray.200"
                                                             bg={
-                                                                fieldRow.name === 'Aggregator' ? 'green.50' :
-                                                                    'purple.50'
+                                                                fieldRow.name === 'Aggregator' ? 'purple.50' :
+                                                                    'green.50'
                                                             }
                                                             color={
-                                                                fieldRow.name === 'Aggregator' ? 'green.700' :
-                                                                    'purple.700'
+                                                                fieldRow.name === 'Aggregator' ? 'purple.700' :
+                                                                    'green.700'
                                                             }
                                                             fontWeight="medium"
                                                             _hover={{
-                                                                bg: fieldRow.name === 'Aggregator' ? 'green.100' : 'purple.100'
+                                                                bg: fieldRow.name === 'Aggregator' ? 'purple.100' : 'green.100'
                                                             }}
                                                             transition="background-color 0.2s"
                                                         >
