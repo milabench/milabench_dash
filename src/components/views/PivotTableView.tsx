@@ -369,100 +369,233 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
             {processedData.length > 0 && !isGenerating && (
                 <Box
                     borderWidth={1}
-                    borderRadius="md"
-                    overflow="auto"
+                    borderColor="gray.200"
+                    borderRadius="lg"
                     minH="400px"
                     height="100%"
                     width="100%"
+                    bg="white"
+                    boxShadow="sm"
+                    _hover={{
+                        boxShadow: "md"
+                    }}
+                    transition="box-shadow 0.2s"
                 >
                     <TableContainer>
-                        <Table variant="striped" size="sm" width="auto" height="100%">
-                            <Thead>
-                                {/* Multi-level headers */}
-                                {columnStructure.headerLevels.map((level, levelIndex) => (
-                                    <Tr key={`header-level-${levelIndex}`}>
-                                        {/* Row columns headers - only show on first level */}
-                                        {levelIndex === 0 && columnStructure.rowColumns.map((columnName, index) => (
-                                            <Th
-                                                key={`row-header-${index}`}
-                                                fontSize="xs"
-                                                px={2}
-                                                py={2}
-                                                rowSpan={columnStructure.headerLevels.length}
-                                                borderRightWidth={2}
-                                                borderRightColor="gray.300"
-                                                bg="gray.50"
-                                            >
-                                                {columnName.replace(/_/g, ':')}
-                                            </Th>
-                                        ))}
-
-                                        {/* Value columns headers */}
-                                        {level.map((header, headerIndex) => (
-                                            <Th
-                                                key={`value-header-${levelIndex}-${headerIndex}`}
-                                                fontSize="xs"
-                                                px={2}
-                                                py={1}
-                                                colSpan={header.colspan}
-                                                textAlign="center"
-                                                borderWidth={1}
-                                                borderColor="gray.300"
-                                                bg={
-                                                    header.level === 'field' ? 'blue.50' :
-                                                        header.level.startsWith('column-') ? 'purple.50' :
-                                                            header.level === 'aggregator' ? 'green.50' :
-                                                                'white'
-                                                }
-                                                color={
-                                                    header.level === 'field' ? 'blue.800' :
-                                                        header.level.startsWith('column-') ? 'purple.800' :
-                                                            header.level === 'aggregator' ? 'green.800' :
-                                                                'gray.800'
-                                                }
-                                            >
-                                                {header.label}
-                                            </Th>
-                                        ))}
-                                    </Tr>
-                                ))}
-
-                                {/* If no header levels (simple table), show simple headers */}
-                                {columnStructure.headerLevels.length === 0 && (
-                                    <Tr>
-                                        {backendColumnNames.map((columnName, index) => (
-                                            <Th
-                                                key={index}
-                                                fontSize="xs"
-                                                px={2}
-                                                py={2}
-                                            >
-                                                {columnName.replace(/_/g, ':')}
-                                            </Th>
-                                        ))}
-                                    </Tr>
-                                )}
-                            </Thead>
+                        <Table variant="simple" size="sm" width="auto" height="100%">
                             <Tbody>
+                                {/* Create transposed header rows for column fields */}
+                                {(() => {
+                                    if (columnStructure.backendValueStructures.length === 0) {
+                                        // Simple table without structured columns
+                                        return (
+                                            <>
+                                                <Tr>
+                                                    {backendColumnNames.map((columnName, index) => (
+                                                        <Th
+                                                            key={index}
+                                                            fontSize="sm"
+                                                            px={4}
+                                                            py={3}
+                                                            borderWidth={1}
+                                                            borderColor="gray.200"
+                                                            bg="blue.100"
+                                                            color="blue.800"
+                                                            fontWeight="semibold"
+                                                            textAlign="left"
+                                                        >
+                                                            {columnName.replace(/_/g, ':')}
+                                                        </Th>
+                                                    ))}
+                                                </Tr>
+                                                {/* Separator row */}
+                                                <Tr>
+                                                    <Td
+                                                        colSpan={backendColumnNames.length}
+                                                        borderBottomWidth={3}
+                                                        borderBottomColor="blue.300"
+                                                        bg="blue.100"
+                                                        h="4px"
+                                                        p={0}
+                                                        position="relative"
+                                                    />
+                                                </Tr>
+                                            </>
+                                        );
+                                    }
+
+                                    // Create rows for each field type in the structured columns
+                                    // First collect all unique field names from column structures
+                                    const fieldRows: Array<{ name: string, values: string[] }> = [];
+
+                                    // Extract field names from first column to determine structure
+                                    if (columnStructure.backendValueStructures.length > 0) {
+                                        const firstCol = columnStructure.backendValueStructures[0];
+
+                                        // Add rows for each column field
+                                        firstCol.columnFields.forEach((field, index) => {
+                                            fieldRows.push({
+                                                name: field.field,
+                                                values: columnStructure.backendValueStructures.map(col =>
+                                                    col.columnFields[index]?.value || ''
+                                                )
+                                            });
+                                        });
+
+                                        // Add aggregator row last
+                                        fieldRows.push({
+                                            name: 'Aggregator',
+                                            values: columnStructure.backendValueStructures.map(col =>
+                                                col.aggregator.toUpperCase()
+                                            )
+                                        });
+                                    }
+
+                                    return (
+                                        <>
+                                            {fieldRows.map((fieldRow, rowIndex) => (
+                                                <Tr key={`header-${rowIndex}`}>
+                                                    {/* Empty cell for first column in all rows except last */}
+                                                    {rowIndex < fieldRows.length - 1 ? (
+                                                        <Th
+                                                            fontSize="sm"
+                                                            px={4}
+                                                            py={3}
+                                                            borderWidth={1}
+                                                            borderColor="gray.200"
+                                                            bg="blue.50"
+                                                            borderRightWidth={2}
+                                                            borderRightColor="blue.200"
+                                                        >
+                                                            {/* Empty */}
+                                                        </Th>
+                                                    ) : (
+                                                        /* Row column header only in last row */
+                                                        <Th
+                                                            fontSize="sm"
+                                                            px={4}
+                                                            py={3}
+                                                            borderWidth={1}
+                                                            borderColor="gray.200"
+                                                            bg="blue.100"
+                                                            color="blue.800"
+                                                            fontWeight="semibold"
+                                                            textAlign="left"
+                                                            borderRightWidth={2}
+                                                            borderRightColor="blue.200"
+                                                        >
+                                                            {columnStructure.rowColumns[0]?.replace(/_/g, ':')}
+                                                        </Th>
+                                                    )}
+
+                                                    {/* Field name label */}
+                                                    <Th
+                                                        fontSize="sm"
+                                                        px={4}
+                                                        py={3}
+                                                        borderWidth={1}
+                                                        borderColor="gray.200"
+                                                        bg="blue.100"
+                                                        color="blue.800"
+                                                        fontWeight="semibold"
+                                                        textAlign="left"
+                                                        minW="140px"
+                                                        borderRightWidth={2}
+                                                        borderRightColor="blue.200"
+                                                    >
+                                                        {fieldRow.name}
+                                                    </Th>
+
+                                                    {/* Values for this field across all columns */}
+                                                    {fieldRow.values.map((value, colIndex) => (
+                                                        <Td
+                                                            key={colIndex}
+                                                            fontSize="sm"
+                                                            px={4}
+                                                            py={3}
+                                                            textAlign="center"
+                                                            borderWidth={1}
+                                                            borderColor="gray.200"
+                                                            bg={
+                                                                fieldRow.name === 'Aggregator' ? 'green.50' :
+                                                                    'purple.50'
+                                                            }
+                                                            color={
+                                                                fieldRow.name === 'Aggregator' ? 'green.700' :
+                                                                    'purple.700'
+                                                            }
+                                                            fontWeight="medium"
+                                                            _hover={{
+                                                                bg: fieldRow.name === 'Aggregator' ? 'green.100' : 'purple.100'
+                                                            }}
+                                                            transition="background-color 0.2s"
+                                                        >
+                                                            {value.replace(/_/g, ':')}
+                                                        </Td>
+                                                    ))}
+                                                </Tr>
+                                            ))}
+
+                                            {/* Separator row */}
+                                            <Tr>
+                                                <Td
+                                                    colSpan={2 + columnStructure.valueColumns.length}
+                                                    borderBottomWidth={3}
+                                                    borderBottomColor="blue.300"
+                                                    bg="blue.100"
+                                                    h="4px"
+                                                    p={0}
+                                                    position="relative"
+                                                />
+                                            </Tr>
+                                        </>
+                                    );
+                                })()}
+
+                                {/* Data rows */}
                                 {processedData.map((row, rowIndex) => (
-                                    <Tr key={rowIndex}>
-                                        {backendColumnNames.map((columnName, colIndex) => (
+                                    <Tr
+                                        key={rowIndex}
+                                        _hover={{
+                                            bg: 'gray.50'
+                                        }}
+                                        transition="background-color 0.2s"
+                                        bg={rowIndex % 2 === 0 ? 'white' : 'gray.25'}
+                                    >
+                                        {/* Benchmark name spanning first two columns */}
+                                        <Td
+                                            colSpan={2}
+                                            fontSize="sm"
+                                            fontWeight="semibold"
+                                            borderWidth={1}
+                                            borderColor="gray.200"
+                                            borderRightWidth={2}
+                                            borderRightColor="blue.200"
+                                            bg="blue.25"
+                                            textAlign="left"
+                                            color="blue.800"
+                                            px={4}
+                                            py={3}
+                                        >
+                                            {formatValue(row[columnStructure.rowColumns[0]])}
+                                        </Td>
+
+                                        {/* Value columns */}
+                                        {columnStructure.valueColumns.map((columnName, colIndex) => (
                                             <Td
                                                 key={colIndex}
                                                 fontSize="sm"
                                                 style={getCellStyle(row[columnName])}
-                                                fontWeight={
-                                                    colIndex < columnStructure.rowColumns.length ? 'semibold' : 'normal'
-                                                }
-                                                borderRightWidth={
-                                                    colIndex === columnStructure.rowColumns.length - 1 ? 2 : 1
-                                                }
-                                                borderRightColor={
-                                                    colIndex === columnStructure.rowColumns.length - 1 ? 'gray.300' : 'gray.200'
-                                                }
-                                                bg={
-                                                    colIndex < columnStructure.rowColumns.length ? 'gray.25' : 'white'
-                                                }
+                                                fontWeight="medium"
+                                                borderWidth={1}
+                                                borderColor="gray.200"
+                                                textAlign="center"
+                                                px={4}
+                                                py={3}
+                                                _hover={{
+                                                    bg: 'blue.50'
+                                                }}
+                                                transition="background-color 0.2s"
                                             >
                                                 {formatValue(row[columnName])}
                                             </Td>
@@ -480,10 +613,22 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                     display="flex"
                     justifyContent="center"
                     alignItems="center"
-                    h="200px"
+                    h="300px"
                     color="gray.500"
+                    bg="gray.50"
+                    borderRadius="lg"
+                    borderWidth={1}
+                    borderColor="gray.200"
+                    borderStyle="dashed"
+                    flexDirection="column"
+                    gap={4}
                 >
-                    <Text>No data available. Configure your pivot and click "Generate Pivot".</Text>
+                    <Text fontSize="lg" fontWeight="medium" color="gray.600">
+                        No data available
+                    </Text>
+                    <Text fontSize="sm" color="gray.500" textAlign="center">
+                        Configure your pivot fields and the table will automatically generate
+                    </Text>
                 </Box>
             )}
         </Box>
