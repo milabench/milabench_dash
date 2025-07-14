@@ -14,8 +14,11 @@ import {
     Spinner,
     Alert,
     AlertIcon,
-    TableContainer
+    TableContainer,
+    IconButton,
+    Tooltip
 } from '@chakra-ui/react';
+import { CopyIcon, DownloadIcon } from '@chakra-ui/icons';
 import axios from 'axios';
 
 interface PivotField {
@@ -100,6 +103,103 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
 
     const generatePivot = async () => {
         await generatePivotFromFields(fields);
+    };
+
+    const copyJsonToClipboard = async () => {
+        try {
+            const jsonData = JSON.stringify(processedData, null, 2);
+
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(jsonData);
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = jsonData;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            toast({
+                title: 'JSON copied to clipboard',
+                description: `${processedData.length} rows copied as JSON`,
+                status: 'success',
+                duration: 3000,
+            });
+        } catch (error) {
+            toast({
+                title: 'Failed to copy JSON',
+                description: 'Could not copy data to clipboard',
+                status: 'error',
+                duration: 3000,
+            });
+        }
+    };
+
+    const copyTableToClipboard = async () => {
+        try {
+            if (processedData.length === 0) {
+                toast({
+                    title: 'No data to copy',
+                    description: 'Generate pivot data first',
+                    status: 'warning',
+                    duration: 3000,
+                });
+                return;
+            }
+
+            // Create CSV format
+            const headers = backendColumnNames.map(name => name.replace(/_/g, ':'));
+            const csvContent = [
+                headers.join('\t'), // Use tabs for better Excel compatibility
+                ...processedData.map(row =>
+                    backendColumnNames.map(col => {
+                        const value = row[col];
+                        // Handle numbers and strings appropriately
+                        if (typeof value === 'number') {
+                            return value.toString();
+                        }
+                        // Escape any tabs or quotes in text
+                        return String(value || '').replace(/\t/g, ' ').replace(/"/g, '""');
+                    }).join('\t')
+                )
+            ].join('\n');
+
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(csvContent);
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = csvContent;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            toast({
+                title: 'Table copied to clipboard',
+                description: `${processedData.length} rows copied as tab-separated values`,
+                status: 'success',
+                duration: 3000,
+            });
+        } catch (error) {
+            toast({
+                title: 'Failed to copy table',
+                description: 'Could not copy table to clipboard',
+                status: 'error',
+                duration: 3000,
+            });
+        }
     };
 
     // Auto-generate when fields change
@@ -341,7 +441,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
     if (error) {
         return (
             <Box h="100%" display="flex" flexDirection="column">
-                <HStack mb={4}>
+                <HStack mb={4} justify="space-between">
                     <Button
                         colorScheme="blue"
                         onClick={generatePivot}
@@ -349,6 +449,30 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                     >
                         Generate Pivot
                     </Button>
+                    {processedData.length > 0 && (
+                        <HStack spacing={2}>
+                            <Tooltip label="Copy JSON data to clipboard">
+                                <IconButton
+                                    icon={<CopyIcon />}
+                                    size="sm"
+                                    colorScheme="blue"
+                                    variant="outline"
+                                    onClick={copyJsonToClipboard}
+                                    aria-label="Copy JSON to clipboard"
+                                />
+                            </Tooltip>
+                            <Tooltip label="Copy table data to clipboard">
+                                <IconButton
+                                    icon={<DownloadIcon />}
+                                    size="sm"
+                                    colorScheme="green"
+                                    variant="outline"
+                                    onClick={copyTableToClipboard}
+                                    aria-label="Copy table to clipboard"
+                                />
+                            </Tooltip>
+                        </HStack>
+                    )}
                 </HStack>
                 <Alert status="error">
                     <AlertIcon />
@@ -380,7 +504,47 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                         boxShadow: "md"
                     }}
                     transition="box-shadow 0.2s"
+                    position="relative"
                 >
+                    {/* Copy buttons */}
+                    <Box
+                        position="absolute"
+                        top={3}
+                        right={3}
+                        zIndex={10}
+                        display="flex"
+                        gap={2}
+                    >
+                        <Tooltip label="Copy JSON data to clipboard" placement="left">
+                            <IconButton
+                                icon={<CopyIcon />}
+                                size="sm"
+                                colorScheme="blue"
+                                variant="outline"
+                                onClick={copyJsonToClipboard}
+                                aria-label="Copy JSON to clipboard"
+                                bg="white"
+                                _hover={{
+                                    bg: "blue.50"
+                                }}
+                            />
+                        </Tooltip>
+                        <Tooltip label="Copy table data to clipboard" placement="left">
+                            <IconButton
+                                icon={<DownloadIcon />}
+                                size="sm"
+                                colorScheme="green"
+                                variant="outline"
+                                onClick={copyTableToClipboard}
+                                aria-label="Copy table to clipboard"
+                                bg="white"
+                                _hover={{
+                                    bg: "green.50"
+                                }}
+                            />
+                        </Tooltip>
+                    </Box>
+
                     <TableContainer>
                         <Table variant="simple" size="sm" width="auto" height="100%">
                             <Tbody>
