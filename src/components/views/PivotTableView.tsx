@@ -105,7 +105,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
 
     const copyJsonToClipboard = async () => {
         try {
-            const jsonData = JSON.stringify(processedData, null, 2);
+            const jsonData = JSON.stringify(sortedData, null, 2);
 
             // Try modern clipboard API first
             if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -125,7 +125,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
 
             toast({
                 title: 'JSON copied to clipboard',
-                description: `${processedData.length} rows copied as JSON`,
+                description: `${sortedData.length} rows copied as JSON`,
                 status: 'success',
                 duration: 3000,
             });
@@ -141,7 +141,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
 
     const copyTableToClipboard = async () => {
         try {
-            if (processedData.length === 0) {
+            if (sortedData.length === 0) {
                 toast({
                     title: 'No data to copy',
                     description: 'Generate pivot data first',
@@ -155,7 +155,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
             const headers = backendColumnNames.map(name => name.replace(/_/g, ':'));
             const csvContent = [
                 headers.join('\t'), // Use tabs for better Excel compatibility
-                ...processedData.map(row =>
+                ...sortedData.map(row =>
                     backendColumnNames.map(col => {
                         const value = row[col];
                         // Handle numbers and strings appropriately
@@ -186,7 +186,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
 
             toast({
                 title: 'Table copied to clipboard',
-                description: `${processedData.length} rows copied as tab-separated values`,
+                description: `${sortedData.length} rows copied as tab-separated values`,
                 status: 'success',
                 duration: 3000,
             });
@@ -242,30 +242,30 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
         const valueFields = fields.filter(f => f.type === 'value');
         const columnFields = fields.filter(f => f.type === 'column');
 
-        // Separate row columns from value columns - maintain backend order
+        // Separate row columns from value columns - maintain fields array order
         const rowColumns: string[] = [];
         const valueColumns: string[] = [];
 
-        columnNames.forEach(colName => {
-            // Check if this column corresponds to a row field by checking if it doesn't contain '/'
-            // Row columns don't have the structured format with '/'
-            if (!colName.includes('/')) {
-                // Check if this column corresponds to a row field
-                const matchingRowField = rowFields.find(rowField => {
-                    const transformedRowField = rowField.replace(/:/g, '_');
-                    return colName === transformedRowField ||
-                        colName === rowField ||
-                        colName.includes(transformedRowField) ||
-                        transformedRowField.includes(colName);
-                });
+        // First, add row columns in the order they appear in the fields array
+        rowFields.forEach(rowField => {
+            const matchingColumn = columnNames.find(colName => {
+                if (colName.includes('/')) return false; // Skip structured columns
+                const transformedRowField = rowField.replace(/:/g, '_');
+                return colName === transformedRowField ||
+                    colName === rowField ||
+                    colName.includes(transformedRowField) ||
+                    transformedRowField.includes(colName);
+            });
+            if (matchingColumn) {
+                rowColumns.push(matchingColumn);
+            }
+        });
 
-                if (matchingRowField) {
-                    rowColumns.push(colName);
-                } else {
-                    // If it doesn't match any row field but has no '/', it's still a row column
-                    rowColumns.push(colName);
-                }
-            } else {
+        // Then, add any remaining non-structured columns that weren't matched
+        columnNames.forEach(colName => {
+            if (!colName.includes('/') && !rowColumns.includes(colName)) {
+                rowColumns.push(colName);
+            } else if (colName.includes('/')) {
                 valueColumns.push(colName);
             }
         });
@@ -405,6 +405,8 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
         return { rowColumns, valueColumns, headerLevels, backendValueStructures: backendValueStructures || [] };
     })();
 
+    // Sort data by row columns in reverse order (last row column first, first row column last)
+    const sortedData = [...processedData]
     // Use backend column order
     const backendColumnNames = [
         ...columnStructure.rowColumns,
@@ -447,7 +449,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                     >
                         Generate Pivot
                     </Button>
-                    {processedData.length > 0 && (
+                    {sortedData.length > 0 && (
                         <HStack spacing={2}>
                             <Tooltip label="Copy JSON data to clipboard">
                                 <IconButton
@@ -488,7 +490,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                 </Box>
             )}
 
-            {processedData.length > 0 && !isGenerating && (
+            {sortedData.length > 0 && !isGenerating && (
                 <Box
                     borderWidth={1}
                     borderColor="gray.200"
@@ -721,7 +723,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                                 })()}
 
                                 {/* Data rows */}
-                                {processedData.map((row, rowIndex) => (
+                                {sortedData.map((row, rowIndex) => (
                                     <Tr
                                         key={rowIndex}
                                         _hover={{
@@ -778,7 +780,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                 </Box>
             )}
 
-            {processedData.length === 0 && !isGenerating && !error && (
+            {sortedData.length === 0 && !isGenerating && !error && (
                 <Box
                     display="flex"
                     justifyContent="center"
