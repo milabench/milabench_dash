@@ -41,8 +41,6 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-
-
     const generatePivotFromFields = async (fieldsToUse: PivotField[]) => {
         try {
             setIsGenerating(true);
@@ -619,41 +617,9 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                                         <>
                                             {fieldRows.map((fieldRow, rowIndex) => (
                                                 <Tr key={`header-${rowIndex}`}>
-                                                    {/* Empty cell for first column in all rows except last */}
-                                                    {rowIndex < fieldRows.length - 1 ? (
-                                                        <Th
-                                                            fontSize="sm"
-                                                            px={4}
-                                                            py={3}
-                                                            borderWidth={1}
-                                                            borderColor="gray.200"
-                                                            bg="blue.50"
-                                                            borderRightWidth={2}
-                                                            borderRightColor="blue.200"
-                                                        >
-                                                            {/* Empty */}
-                                                        </Th>
-                                                    ) : (
-                                                        /* Row column header only in last row */
-                                                        <Th
-                                                            fontSize="sm"
-                                                            px={4}
-                                                            py={3}
-                                                            borderWidth={1}
-                                                            borderColor="gray.200"
-                                                            bg="blue.100"
-                                                            color="blue.800"
-                                                            fontWeight="semibold"
-                                                            textAlign="left"
-                                                            borderRightWidth={2}
-                                                            borderRightColor="blue.200"
-                                                        >
-                                                            {columnStructure.rowColumns[0]?.replace(/_/g, ':')}
-                                                        </Th>
-                                                    )}
-
-                                                    {/* Field name label */}
+                                                    {/* Field name label spanning row columns only */}
                                                     <Th
+                                                        colSpan={columnStructure.rowColumns.length}
                                                         fontSize="sm"
                                                         px={4}
                                                         py={3}
@@ -700,10 +666,48 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                                                 </Tr>
                                             ))}
 
+                                            {/* Row column headers row */}
+                                            <Tr>
+                                                {/* Row column headers */}
+                                                {columnStructure.rowColumns.map((rowColumn, colIndex) => (
+                                                    <Th
+                                                        key={`row-header-${colIndex}`}
+                                                        fontSize="sm"
+                                                        px={4}
+                                                        py={3}
+                                                        borderWidth={1}
+                                                        borderColor="gray.200"
+                                                        bg="blue.100"
+                                                        color="blue.800"
+                                                        fontWeight="semibold"
+                                                        textAlign="left"
+                                                        borderRightWidth={colIndex === columnStructure.rowColumns.length - 1 ? 2 : 1}
+                                                        borderRightColor={colIndex === columnStructure.rowColumns.length - 1 ? "blue.200" : "gray.200"}
+                                                    >
+                                                        {rowColumn.replace(/_/g, ':')}
+                                                    </Th>
+                                                ))}
+
+                                                {/* Empty cells for value columns */}
+                                                {columnStructure.valueColumns.map((_, colIndex) => (
+                                                    <Th
+                                                        key={`empty-value-${colIndex}`}
+                                                        fontSize="sm"
+                                                        px={4}
+                                                        py={3}
+                                                        borderWidth={1}
+                                                        borderColor="gray.200"
+                                                        bg="blue.50"
+                                                    >
+                                                        {/* Empty */}
+                                                    </Th>
+                                                ))}
+                                            </Tr>
+
                                             {/* Separator row */}
                                             <Tr>
                                                 <Td
-                                                    colSpan={2 + columnStructure.valueColumns.length}
+                                                    colSpan={columnStructure.rowColumns.length + columnStructure.valueColumns.length}
                                                     borderBottomWidth={3}
                                                     borderBottomColor="blue.300"
                                                     bg="blue.100"
@@ -726,23 +730,25 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                                         transition="background-color 0.2s"
                                         bg={rowIndex % 2 === 0 ? 'white' : 'gray.25'}
                                     >
-                                        {/* Benchmark name spanning first two columns */}
-                                        <Td
-                                            colSpan={2}
-                                            fontSize="sm"
-                                            fontWeight="semibold"
-                                            borderWidth={1}
-                                            borderColor="gray.200"
-                                            borderRightWidth={2}
-                                            borderRightColor="blue.200"
-                                            bg="blue.25"
-                                            textAlign="left"
-                                            color="blue.800"
-                                            px={4}
-                                            py={3}
-                                        >
-                                            {formatValue(row[columnStructure.rowColumns[0]])}
-                                        </Td>
+                                        {/* Row column values */}
+                                        {columnStructure.rowColumns.map((rowColumn, colIndex) => (
+                                            <Td
+                                                key={`row-${colIndex}`}
+                                                fontSize="sm"
+                                                fontWeight="semibold"
+                                                borderWidth={1}
+                                                borderColor="gray.200"
+                                                borderRightWidth={colIndex === columnStructure.rowColumns.length - 1 ? 2 : 1}
+                                                borderRightColor={colIndex === columnStructure.rowColumns.length - 1 ? "blue.200" : "gray.200"}
+                                                bg="blue.25"
+                                                textAlign="left"
+                                                color="blue.800"
+                                                px={4}
+                                                py={3}
+                                            >
+                                                {formatValue(row[rowColumn])}
+                                            </Td>
+                                        ))}
 
                                         {/* Value columns */}
                                         {columnStructure.valueColumns.map((columnName, colIndex) => (
