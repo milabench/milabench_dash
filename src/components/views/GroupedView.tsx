@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Select, FormControl, FormLabel, HStack, Input, VStack, Button, useToast, Text, Heading, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Switch } from '@chakra-ui/react';
+import { Box, Select, FormControl, FormLabel, HStack, Input, VStack, Button, useToast, Text, Heading, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Switch, IconButton, Tooltip } from '@chakra-ui/react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
-import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
+import { AddIcon, DeleteIcon, CopyIcon, DownloadIcon } from '@chakra-ui/icons';
 import { saveQuery, getAllSavedQueries } from '../../services/api';
 
 interface ExtraField {
@@ -101,6 +101,31 @@ const GroupedView: React.FC = () => {
     const { data: savedQueries } = useQuery({
         queryKey: ['savedQueries'],
         queryFn: getAllSavedQueries,
+    });
+
+    // Fetch grouped plot data for copy functionality
+    const { data: groupedData } = useQuery({
+        queryKey: ['groupedData', g1Value, n1Value, g2Value, n2Value, metricValue, more, execIdsValue, colorValue, profileValue, invertedValue, weightedValue],
+        queryFn: async () => {
+            if (!execIdsValue) return [];
+
+            const params = new URLSearchParams();
+            if (g1Value) params.set('g1', g1Value);
+            if (n1Value) params.set('n1', n1Value);
+            if (g2Value) params.set('g2', g2Value);
+            if (n2Value) params.set('n2', n2Value);
+            if (metricValue) params.set('metric', metricValue);
+            if (more) params.set('more', more);
+            params.set('exec_ids', execIdsValue);
+            if (colorValue) params.set('color', colorValue);
+            if (profileValue) params.set('profile', profileValue);
+            if (invertedValue) params.set('inverted', 'true');
+            if (weightedValue) params.set('weighted', 'true');
+
+            const response = await axios.get(`/api/grouped/plot?${params.toString()}`);
+            return response.data;
+        },
+        enabled: !!execIdsValue,
     });
 
     const handleG1Change = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -385,9 +410,116 @@ const GroupedView: React.FC = () => {
         onLoadModalClose();
     };
 
+    const copyJsonToClipboard = async () => {
+        try {
+            if (!groupedData || groupedData.length === 0) {
+                toast({
+                    title: 'No data to copy',
+                    description: 'Please configure and load data first',
+                    status: 'warning',
+                    duration: 3000,
+                });
+                return;
+            }
+
+            const jsonData = JSON.stringify(groupedData, null, 2);
+
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(jsonData);
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = jsonData;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            toast({
+                title: 'JSON copied to clipboard',
+                description: `${groupedData.length} rows copied as JSON`,
+                status: 'success',
+                duration: 3000,
+            });
+        } catch (error) {
+            toast({
+                title: 'Failed to copy JSON',
+                description: 'Could not copy data to clipboard',
+                status: 'error',
+                duration: 3000,
+            });
+        }
+    };
+
+    const copyCsvToClipboard = async () => {
+        try {
+            if (!groupedData || groupedData.length === 0) {
+                toast({
+                    title: 'No data to copy',
+                    description: 'Please configure and load data first',
+                    status: 'warning',
+                    duration: 3000,
+                });
+                return;
+            }
+
+            // Create CSV format
+            const headers = Object.keys(groupedData[0]);
+            const csvContent = [
+                headers.join(','),
+                ...groupedData.map((row: any) =>
+                    headers.map(col => {
+                        const value = row[col];
+                        // Handle numbers and strings appropriately
+                        if (typeof value === 'number') {
+                            return value.toString();
+                        }
+                        // Escape any commas or quotes in text
+                        return String(value || '').replace(/,/g, ';').replace(/"/g, '""');
+                    }).join(',')
+                )
+            ].join('\n');
+
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(csvContent);
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = csvContent;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            toast({
+                title: 'CSV copied to clipboard',
+                description: `${groupedData.length} rows copied as CSV`,
+                status: 'success',
+                duration: 3000,
+            });
+        } catch (error) {
+            toast({
+                title: 'Failed to copy CSV',
+                description: 'Could not copy data to clipboard',
+                status: 'error',
+                duration: 3000,
+            });
+        }
+    };
+
     return (
         <Box p={4} height="100vh" display="flex" flexDirection="column">
-            <VStack align="stretch" spacing={6}>
+            <VStack align="stretch" spacing={6} height="100%">
                 <HStack spacing={4} mb={4} width="100%">
                     <FormControl flex="1">
                         <FormLabel>Column Field</FormLabel>
@@ -546,17 +678,41 @@ const GroupedView: React.FC = () => {
                     <Button
                         colorScheme="green"
                         onClick={onSaveModalOpen}
-                        size="lg"
+                        size="md"
                     >
                         Save Query
                     </Button>
                     <Button
                         colorScheme="blue"
                         onClick={onLoadModalOpen}
-                        size="lg"
+                        size="md"
                     >
                         Load Query
                     </Button>
+                    <Tooltip label="Copy data as JSON">
+                        <Button
+                            leftIcon={<CopyIcon />}
+                            onClick={copyJsonToClipboard}
+                            colorScheme="blue"
+                            variant="outline"
+                            size="md"
+                            isDisabled={!groupedData || groupedData.length === 0}
+                        >
+                            Copy as JSON
+                        </Button>
+                    </Tooltip>
+                    <Tooltip label="Copy data as CSV">
+                        <Button
+                            leftIcon={<DownloadIcon />}
+                            onClick={copyCsvToClipboard}
+                            colorScheme="green"
+                            variant="outline"
+                            size="md"
+                            isDisabled={!groupedData || groupedData.length === 0}
+                        >
+                            Copy as CSV
+                        </Button>
+                    </Tooltip>
                 </HStack>
 
                 <Box flex="1">
@@ -574,7 +730,7 @@ const GroupedView: React.FC = () => {
                             invertedValue && 'inverted=true',
                             weightedValue && 'weighted=true'
                         ].filter(Boolean).join('&')}`}
-                        style={{ width: '100vh', height: '100vh', border: 'none' }}
+                        style={{ width: '100%', height: '100%', border: 'none' }}
                         title="Grouped Plot"
                     />
                 </Box>
