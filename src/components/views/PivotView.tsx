@@ -65,6 +65,9 @@ export const PivotView = () => {
         { field: 'Metric:value', type: 'value', aggregators: ['avg'] },
     ]);
     const dropZonesRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
+    const [triggerGeneration, setTriggerGeneration] = useState(0);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [executionTime, setExecutionTime] = useState<number | null>(null);
 
     // Save/Load modal state
     const { isOpen: isSaveModalOpen, onOpen: onSaveModalOpen, onClose: onSaveModalClose } = useDisclosure();
@@ -178,6 +181,17 @@ export const PivotView = () => {
         }
     }, []);
 
+    // Auto-update URL when fields change
+    useEffect(() => {
+        updateURLParams();
+    }, [fields, isRelativePivot]);
+
+    // Reset timing when view mode changes
+    useEffect(() => {
+        setExecutionTime(null);
+        setGenerationStartTime(null);
+    }, [viewMode]);
+
     const handleFieldDrop = (type: 'row' | 'column' | 'value' | 'filter', field: string) => {
         if (type === 'filter') {
             setSelectedField({ field, type });
@@ -285,6 +299,28 @@ export const PivotView = () => {
             { field: 'Metric:value', type: 'value', aggregators: ['avg'] },
         ]);
         setSearchParams(new URLSearchParams());
+    };
+
+    const generatePivot = () => {
+        // Start timing
+        setGenerationStartTime(performance.now());
+        setExecutionTime(null);
+
+        // Increment trigger to signal child components to generate
+        console.log('Generate pivot triggered from PivotView');
+        setTriggerGeneration(prev => prev + 1);
+    };
+
+    const [generationCompleteCallback, setGenerationCompleteCallback] = useState<(() => void) | null>(null);
+    const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+
+    const handleGenerationComplete = () => {
+        if (generationStartTime) {
+            const endTime = performance.now();
+            const duration = endTime - generationStartTime;
+            setExecutionTime(duration);
+            setGenerationStartTime(null);
+        }
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -1154,17 +1190,17 @@ export const PivotView = () => {
                                 colorScheme={viewMode === 'iframe' ? 'blue' : 'gray'}
                                 onClick={() => setViewMode('iframe')}
                             >
-                                Iframe View
+                                Pandas
                             </Button>
                             <Button
                                 colorScheme={viewMode === 'table' ? 'blue' : 'gray'}
                                 onClick={() => setViewMode('table')}
                             >
-                                Table View
+                                SQL
                             </Button>
                         </ButtonGroup>
-                        <Button onClick={resetPivot}>Reset</Button>
-                        <Button
+                        <Button size="sm" onClick={resetPivot}>Reset</Button>
+                        <Button size="sm"
                             colorScheme={isRelativePivot ? "green" : "gray"}
                             onClick={() => {
                                 setIsRelativePivot(!isRelativePivot);
@@ -1172,13 +1208,27 @@ export const PivotView = () => {
                         >
                             {!isRelativePivot ? "Relative View" : "Normal View"}
                         </Button>
-                        <Button
-                            colorScheme="purple"
-                            onClick={updateURLParams}
-                            size="sm"
-                        >
-                            Update URL
+
+                        <Button size="sm" onClick={generatePivot} isLoading={isGenerating}>
+                            Execute Query
                         </Button>
+                        {executionTime !== null && (
+                            <HStack spacing={1} ml={2}>
+                                <Text fontSize="sm" color="green.600" fontWeight="semibold">
+                                    ✓
+                                </Text>
+                                <Text fontSize="sm" color="gray.700" fontWeight="medium">
+                                    {executionTime < 1000 ? `${executionTime.toFixed(0)}ms` : `${(executionTime / 1000).toFixed(2)}s`}
+                                </Text>
+                            </HStack>
+                        )}
+                        {isGenerating && executionTime === null && (
+                            <HStack spacing={1} ml={2}>
+                                <Text fontSize="sm" color="blue.600" fontWeight="medium">
+                                    Generating...
+                                </Text>
+                            </HStack>
+                        )}
                     </HStack>
                 </GridItem>
 
@@ -1188,12 +1238,20 @@ export const PivotView = () => {
                             fields={fields}
                             isRelativePivot={isRelativePivot}
                             onFieldsChange={setFields}
+                            triggerGeneration={triggerGeneration}
+                            setTriggerGeneration={setTriggerGeneration}
+                            setIsGenerating={setIsGenerating}
+                            onGenerationComplete={viewMode === 'iframe' ? handleGenerationComplete : undefined}
                         />
                     ) : (
                         <PivotTableView
                             fields={fields}
                             isRelativePivot={isRelativePivot}
                             onFieldsChange={setFields}
+                            triggerGeneration={triggerGeneration}
+                            setTriggerGeneration={setTriggerGeneration}
+                            setIsGenerating={setIsGenerating}
+                            onGenerationComplete={viewMode === 'table' ? handleGenerationComplete : undefined}
                         />
                     )}
                 </GridItem>

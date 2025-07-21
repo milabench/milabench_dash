@@ -33,12 +33,15 @@ interface PivotTableViewProps {
     fields: PivotField[];
     isRelativePivot: boolean;
     onFieldsChange: (fields: PivotField[]) => void;
+    triggerGeneration: number;
+    setTriggerGeneration: (value: number | ((prev: number) => number)) => void;
+    setIsGenerating: (value: boolean) => void;
+    onGenerationComplete?: (() => void) | null;
 }
 
-export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: PivotTableViewProps) => {
+export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, triggerGeneration, setTriggerGeneration, setIsGenerating, onGenerationComplete }: PivotTableViewProps) => {
     const toast = useToast();
     const [pivotData, setPivotData] = useState<any[]>([]);
-    const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const generatePivotFromFields = async (fieldsToUse: PivotField[]) => {
@@ -96,12 +99,21 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
             });
         } finally {
             setIsGenerating(false);
+            // Call the completion callback if provided
+            if (onGenerationComplete) {
+                onGenerationComplete();
+            }
         }
     };
 
-    const generatePivot = async () => {
-        await generatePivotFromFields(fields);
-    };
+    // Respond to trigger from parent component
+    useEffect(() => {
+        if (triggerGeneration > 0 && fields.length > 0) {
+            generatePivotFromFields(fields);
+            // Reset trigger after generation
+            setTriggerGeneration(0);
+        }
+    }, [triggerGeneration, fields, isRelativePivot]);
 
     const copyJsonToClipboard = async () => {
         try {
@@ -199,13 +211,6 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
             });
         }
     };
-
-    // Auto-generate when fields change
-    useEffect(() => {
-        if (fields.length > 0) {
-            generatePivotFromFields(fields);
-        }
-    }, [fields, isRelativePivot]);
 
     // Process data for relative pivot
     const processedData = isRelativePivot && pivotData.length > 0 ?
@@ -442,13 +447,6 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
         return (
             <Box h="100%" display="flex" flexDirection="column">
                 <HStack mb={4} justify="space-between">
-                    <Button
-                        colorScheme="blue"
-                        onClick={generatePivot}
-                        isLoading={isGenerating}
-                    >
-                        Generate Pivot
-                    </Button>
                     {sortedData.length > 0 && (
                         <HStack spacing={2}>
                             <Tooltip label="Copy JSON data to clipboard">
@@ -484,13 +482,14 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
 
     return (
         <Box>
-            {isGenerating && (
+            {/* isGenerating is now managed by the parent component */}
+            {/* {isGenerating && (
                 <Box display="flex" justifyContent="center" alignItems="center" h="200px">
                     <Spinner size="xl" />
                 </Box>
-            )}
+            )} */}
 
-            {sortedData.length > 0 && !isGenerating && (
+            {sortedData.length > 0 && (
                 <Box
                     borderWidth={1}
                     borderColor="gray.200"
@@ -780,7 +779,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange }: Pivo
                 </Box>
             )}
 
-            {sortedData.length === 0 && !isGenerating && !error && (
+            {sortedData.length === 0 && !error && (
                 <Box
                     display="flex"
                     justifyContent="center"

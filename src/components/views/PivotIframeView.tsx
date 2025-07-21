@@ -14,12 +14,15 @@ interface PivotIframeViewProps {
     fields: PivotField[];
     isRelativePivot: boolean;
     onFieldsChange: (fields: PivotField[]) => void;
+    triggerGeneration: number;
+    setTriggerGeneration: (value: number | ((prev: number) => number)) => void;
+    setIsGenerating: (value: boolean) => void;
+    onGenerationComplete?: (() => void) | null;
 }
 
-export const PivotIframeView = ({ fields, isRelativePivot, onFieldsChange }: PivotIframeViewProps) => {
+export const PivotIframeView = ({ fields, isRelativePivot, onFieldsChange, triggerGeneration, setTriggerGeneration, setIsGenerating, onGenerationComplete }: PivotIframeViewProps) => {
     const toast = useToast();
     const [pivotHtml, setPivotHtml] = useState<string>('');
-    const [isGenerating, setIsGenerating] = useState(false);
 
     const generatePivotFromFields = async (fieldsToUse: PivotField[]) => {
         try {
@@ -68,32 +71,24 @@ export const PivotIframeView = ({ fields, isRelativePivot, onFieldsChange }: Piv
             });
         } finally {
             setIsGenerating(false);
+            // Call the completion callback if provided
+            if (onGenerationComplete) {
+                onGenerationComplete();
+            }
         }
     };
 
-    const generatePivot = async () => {
-        await generatePivotFromFields(fields);
-    };
-
-    // Auto-generate when fields change
+    // Respond to trigger from parent component
     useEffect(() => {
-        if (fields.length > 0) {
+        if (triggerGeneration > 0 && fields.length > 0) {
             generatePivotFromFields(fields);
+            // Reset trigger after generation
+            setTriggerGeneration(0);
         }
-    }, [fields, isRelativePivot]);
+    }, [triggerGeneration, fields, isRelativePivot]);
 
     return (
         <Box h="100%" display="flex" flexDirection="column">
-            <HStack mb={4}>
-                <Button
-                    colorScheme="blue"
-                    onClick={generatePivot}
-                    isLoading={isGenerating}
-                >
-                    Generate Pivot
-                </Button>
-            </HStack>
-
             {pivotHtml && (
                 <Box
                     flex="1"
