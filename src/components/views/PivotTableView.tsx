@@ -16,7 +16,9 @@ import {
     AlertIcon,
     TableContainer,
     IconButton,
-    Tooltip
+    Tooltip,
+    Select,
+    VStack
 } from '@chakra-ui/react';
 import { CopyIcon, DownloadIcon } from '@chakra-ui/icons';
 import axios from 'axios';
@@ -43,6 +45,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
     const toast = useToast();
     const [pivotData, setPivotData] = useState<any[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [selectedBaselineColumn, setSelectedBaselineColumn] = useState<string | null>(null);
 
     const generatePivotFromFields = async (fieldsToUse: PivotField[]) => {
         try {
@@ -115,125 +118,14 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
         }
     }, [triggerGeneration, fields, isRelativePivot]);
 
-    const copyJsonToClipboard = async () => {
-        try {
-            const jsonData = JSON.stringify(sortedData, null, 2);
-
-            // Try modern clipboard API first
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(jsonData);
-            } else {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = jsonData;
-                textArea.style.position = 'fixed';
-                textArea.style.opacity = '0';
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-            }
-
-            toast({
-                title: 'JSON copied to clipboard',
-                description: `${sortedData.length} rows copied as JSON`,
-                status: 'success',
-                duration: 3000,
-            });
-        } catch (error) {
-            toast({
-                title: 'Failed to copy JSON',
-                description: 'Could not copy data to clipboard',
-                status: 'error',
-                duration: 3000,
-            });
+    // Reset selected baseline column when data changes or relative pivot is disabled
+    useEffect(() => {
+        if (!isRelativePivot) {
+            setSelectedBaselineColumn(null);
         }
-    };
+    }, [isRelativePivot, pivotData]);
 
-    const copyTableToClipboard = async () => {
-        try {
-            if (sortedData.length === 0) {
-                toast({
-                    title: 'No data to copy',
-                    description: 'Generate pivot data first',
-                    status: 'warning',
-                    duration: 3000,
-                });
-                return;
-            }
 
-            // Create CSV format
-            const headers = backendColumnNames.map(name => name.replace(/_/g, ':'));
-            const csvContent = [
-                headers.join('\t'), // Use tabs for better Excel compatibility
-                ...sortedData.map(row =>
-                    backendColumnNames.map(col => {
-                        const value = row[col];
-                        // Handle numbers and strings appropriately
-                        if (typeof value === 'number') {
-                            return value.toString();
-                        }
-                        // Escape any tabs or quotes in text
-                        return String(value || '').replace(/\t/g, ' ').replace(/"/g, '""');
-                    }).join('\t')
-                )
-            ].join('\n');
-
-            // Try modern clipboard API first
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(csvContent);
-            } else {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = csvContent;
-                textArea.style.position = 'fixed';
-                textArea.style.opacity = '0';
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-            }
-
-            toast({
-                title: 'Table copied to clipboard',
-                description: `${sortedData.length} rows copied as tab-separated values`,
-                status: 'success',
-                duration: 3000,
-            });
-        } catch (error) {
-            toast({
-                title: 'Failed to copy table',
-                description: 'Could not copy table to clipboard',
-                status: 'error',
-                duration: 3000,
-            });
-        }
-    };
-
-    // Process data for relative pivot
-    const processedData = isRelativePivot && pivotData.length > 0 ?
-        pivotData.map((row, index) => {
-            if (index === 0) return row; // Keep header row as is
-
-            const processedRow = { ...row };
-            // Find the first numeric column as baseline
-            const firstNumericKey = Object.keys(row).find(key =>
-                key !== Object.keys(row)[0] && typeof row[key] === 'number'
-            );
-
-            if (firstNumericKey) {
-                const baseline = row[firstNumericKey];
-                Object.keys(row).forEach(key => {
-                    if (typeof row[key] === 'number' && key !== Object.keys(row)[0]) {
-                        processedRow[key] = baseline !== 0 ? row[key] / baseline : 0;
-                    }
-                });
-            }
-
-            return processedRow;
-        }) : pivotData;
 
     // Get column names from the first row - use backend order
     const columnNames = pivotData.length > 0 ? Object.keys(pivotData[0]) : [];
@@ -410,6 +302,35 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
         return { rowColumns, valueColumns, headerLevels, backendValueStructures: backendValueStructures || [] };
     })();
 
+    // Process data for relative pivot
+    const processedData = isRelativePivot && pivotData.length > 0 ?
+        pivotData.map((row, index) => {
+            const processedRow = { ...row };
+
+            // Use selected baseline column or fall back to first numeric value column
+            let baselineKey = selectedBaselineColumn;
+            if (!baselineKey) {
+                const firstNumericValueKey = columnStructure.valueColumns.find(key =>
+                    typeof row[key] === 'number'
+                );
+                baselineKey = firstNumericValueKey || null;
+            }
+
+            if (baselineKey && typeof row[baselineKey] === 'number') {
+                const baseline = row[baselineKey];
+                // Only normalize value columns, not row columns
+                columnStructure.valueColumns.forEach(key => {
+                    if (typeof row[key] === 'number' && key !== baselineKey) {
+                        processedRow[key] = baseline !== 0 ? row[key] / baseline : 0;
+                    }
+                });
+                // Set baseline column to 1.0 (100%)
+                processedRow[baselineKey] = 1.0;
+            }
+
+            return processedRow;
+        }) : pivotData;
+
     // Sort data by row columns in reverse order (last row column first, first row column last)
     const sortedData = [...processedData]
     // Use backend column order
@@ -417,6 +338,103 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
         ...columnStructure.rowColumns,
         ...columnStructure.backendValueStructures.map((col: any) => col.columnName)
     ];
+
+    const copyJsonToClipboard = async () => {
+        try {
+            const jsonData = JSON.stringify(sortedData, null, 2);
+
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(jsonData);
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = jsonData;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            toast({
+                title: 'JSON copied to clipboard',
+                description: `${sortedData.length} rows copied as JSON`,
+                status: 'success',
+                duration: 3000,
+            });
+        } catch (error) {
+            toast({
+                title: 'Failed to copy JSON',
+                description: 'Could not copy data to clipboard',
+                status: 'error',
+                duration: 3000,
+            });
+        }
+    };
+
+    const copyTableToClipboard = async () => {
+        try {
+            if (sortedData.length === 0) {
+                toast({
+                    title: 'No data to copy',
+                    description: 'Generate pivot data first',
+                    status: 'warning',
+                    duration: 3000,
+                });
+                return;
+            }
+
+            // Create CSV format
+            const headers = backendColumnNames.map(name => name.replace(/_/g, ':'));
+            const csvContent = [
+                headers.join('\t'), // Use tabs for better Excel compatibility
+                ...sortedData.map(row =>
+                    backendColumnNames.map(col => {
+                        const value = row[col];
+                        // Handle numbers and strings appropriately
+                        if (typeof value === 'number') {
+                            return value.toString();
+                        }
+                        // Escape any tabs or quotes in text
+                        return String(value || '').replace(/\t/g, ' ').replace(/"/g, '""');
+                    }).join('\t')
+                )
+            ].join('\n');
+
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(csvContent);
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = csvContent;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            toast({
+                title: 'Table copied to clipboard',
+                description: `${sortedData.length} rows copied as tab-separated values`,
+                status: 'success',
+                duration: 3000,
+            });
+        } catch (error) {
+            toast({
+                title: 'Failed to copy table',
+                description: 'Could not copy table to clipboard',
+                status: 'error',
+                duration: 3000,
+            });
+        }
+    };
 
     const formatValue = (value: any) => {
         if (typeof value === 'number') {
@@ -431,8 +449,17 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
         return value;
     };
 
-    const getCellStyle = (value: any) => {
+    const getCellStyle = (value: any, columnName?: string) => {
         if (isRelativePivot && typeof value === 'number') {
+            // Highlight baseline column
+            if (columnName === selectedBaselineColumn) {
+                return {
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)', // blue background
+                    border: '2px solid rgba(59, 130, 246, 0.6)',
+                    fontWeight: 'bold'
+                };
+            }
+
             const intensity = Math.min(Math.abs(value - 1), 0.5) * 2;
             if (value > 1) {
                 return { backgroundColor: `rgba(0, 255, 0, ${intensity * 0.3})` };
@@ -488,6 +515,42 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
                     <Spinner size="xl" />
                 </Box>
             )} */}
+
+            {/* Baseline column selector for relative pivot */}
+            {isRelativePivot && sortedData.length > 0 && (
+                <Box mb={4} p={4} bg="blue.50" borderRadius="md" borderWidth={1} borderColor="blue.200">
+                    <VStack spacing={2} align="start">
+                        <Text fontSize="sm" fontWeight="semibold" color="blue.800">
+                            Select Baseline Column for Relative Values:
+                        </Text>
+                        <Tooltip
+                            label="Select which column to use as the baseline (100%) for relative calculations. All other columns will be shown as ratios relative to this column."
+                            placement="top"
+                            hasArrow
+                        >
+                            <Select
+                                size="sm"
+                                value={selectedBaselineColumn || ''}
+                                onChange={(e) => setSelectedBaselineColumn(e.target.value || null)}
+                                placeholder="Auto-select first numeric column"
+                                bg="white"
+                                borderColor="blue.300"
+                                _hover={{ borderColor: "blue.400" }}
+                                maxW="400px"
+                            >
+                                {columnStructure.valueColumns.map((columnName, index) => (
+                                    <option key={index} value={columnName}>
+                                        {columnName.replace(/_/g, ':')}
+                                    </option>
+                                ))}
+                            </Select>
+                        </Tooltip>
+                        <Text fontSize="xs" color="blue.600">
+                            All values will be calculated relative to the selected column (baseline = 1.0)
+                        </Text>
+                    </VStack>
+                </Box>
+            )}
 
             {sortedData.length > 0 && (
                 <Box
@@ -690,7 +753,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
                                                 ))}
 
                                                 {/* Empty cells for value columns */}
-                                                {columnStructure.valueColumns.map((_, colIndex) => (
+                                                {columnStructure.valueColumns.map((columnName, colIndex) => (
                                                     <Th
                                                         key={`empty-value-${colIndex}`}
                                                         fontSize="sm"
@@ -698,9 +761,25 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
                                                         py={3}
                                                         borderWidth={1}
                                                         borderColor="gray.200"
-                                                        bg="blue.50"
+                                                        bg={columnName === selectedBaselineColumn ? "blue.200" : "blue.50"}
+                                                        position="relative"
                                                     >
-                                                        {/* Empty */}
+                                                        {columnName === selectedBaselineColumn && (
+                                                            <Box
+                                                                position="absolute"
+                                                                top={1}
+                                                                right={1}
+                                                                bg="blue.600"
+                                                                color="white"
+                                                                fontSize="xs"
+                                                                px={1}
+                                                                py={0.5}
+                                                                borderRadius="sm"
+                                                                fontWeight="bold"
+                                                            >
+                                                                BASELINE
+                                                            </Box>
+                                                        )}
                                                     </Th>
                                                 ))}
                                             </Tr>
@@ -756,7 +835,7 @@ export const PivotTableView = ({ fields, isRelativePivot, onFieldsChange, trigge
                                             <Td
                                                 key={colIndex}
                                                 fontSize="sm"
-                                                style={getCellStyle(row[columnName])}
+                                                style={getCellStyle(row[columnName], columnName)}
                                                 fontWeight="medium"
                                                 borderWidth={1}
                                                 borderColor="gray.200"

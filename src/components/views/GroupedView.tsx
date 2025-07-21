@@ -26,6 +26,11 @@ const GroupedView: React.FC = () => {
     // Load modal state
     const { isOpen: isLoadModalOpen, onOpen: onLoadModalOpen, onClose: onLoadModalClose } = useDisclosure();
 
+    // Relative view state
+    const [isRelativeView, setIsRelativeView] = useState<boolean>(false);
+    const [relativeColumn, setRelativeColumn] = useState<string>('');
+    const [relativeBaseline, setRelativeBaseline] = useState<string>('');
+
     // Local state for input values
     const [g1Value, setG1Value] = useState<string>('');
     const [n1Value, setN1Value] = useState<string>('');
@@ -50,6 +55,7 @@ const GroupedView: React.FC = () => {
     const profile = searchParams.get('profile') || 'default';
     const inverted = searchParams.get('inverted') === 'true';
     const weighted = searchParams.get('weighted') === 'true';
+    const relative = searchParams.get('relative') || '';
 
     // Initialize local state from URL parameters
     useEffect(() => {
@@ -63,6 +69,21 @@ const GroupedView: React.FC = () => {
         setProfileValue(searchParams.get('profile') || '');
         setInvertedValue(searchParams.get('inverted') === 'true');
         setWeightedValue(searchParams.get('weighted') === 'true');
+
+        // Initialize relative view from URL
+        const relativeParam = searchParams.get('relative') || '';
+        if (relativeParam) {
+            const [column, baseline] = relativeParam.split('=');
+            if (column && baseline) {
+                setIsRelativeView(true);
+                setRelativeColumn(decodeURIComponent(column));
+                setRelativeBaseline(decodeURIComponent(baseline));
+            }
+        } else {
+            setIsRelativeView(false);
+            setRelativeColumn('');
+            setRelativeBaseline('');
+        }
     }, [searchParams]);
 
     // Initialize extraFields from more parameter
@@ -127,6 +148,65 @@ const GroupedView: React.FC = () => {
         },
         enabled: !!execIdsValue,
     });
+
+    // Get available columns from grouped data
+    const availableColumns = React.useMemo(() => {
+        if (!groupedData || groupedData.length === 0) return [];
+
+        const columns = Object.keys(groupedData[0]).filter(key =>
+            key !== metricValue &&
+            key !== 'exec_id' &&
+            typeof groupedData[0][key] === 'string'
+        );
+        return columns;
+    }, [groupedData, metricValue]);
+
+    // Get available values for the selected relative column
+    const availableBaselineValues = React.useMemo(() => {
+        if (!groupedData || !relativeColumn || groupedData.length === 0) return [];
+
+        const values = [...new Set(groupedData.map((row: any) => row[relativeColumn]))];
+        return values.filter(value => value !== null && value !== undefined);
+    }, [groupedData, relativeColumn]);
+
+    // Compute relative data
+    const relativeData = React.useMemo(() => {
+        if (!isRelativeView || !groupedData || !relativeColumn || !relativeBaseline || groupedData.length === 0) {
+            return groupedData;
+        }
+
+        // Create a lookup for baseline values
+        const baselineLookup = new Map();
+
+        // Group data by the combination of group fields (excluding the relative column)
+        const groupKeys = Object.keys(groupedData[0]).filter(key =>
+            key !== relativeColumn &&
+            key !== metricValue &&
+            key !== 'exec_id'
+        );
+
+        // Find baseline values for each group combination
+        groupedData.forEach((row: any) => {
+            if (row[relativeColumn] === relativeBaseline) {
+                const groupKey = groupKeys.map(key => row[key]).join('|');
+                baselineLookup.set(groupKey, row[metricValue]);
+            }
+        });
+
+        // Apply relative calculations
+        return groupedData.map((row: any) => {
+            const groupKey = groupKeys.map(key => row[key]).join('|');
+            const baselineValue = baselineLookup.get(groupKey);
+
+            if (baselineValue && baselineValue !== 0) {
+                return {
+                    ...row,
+                    [metricValue]: row[metricValue] / baselineValue
+                };
+            }
+            return row;
+        });
+    }, [groupedData, isRelativeView, relativeColumn, relativeBaseline, metricValue]);
 
     const handleG1Change = (event: React.ChangeEvent<HTMLSelectElement>) => {
         const value = event.target.value;
@@ -268,6 +348,58 @@ const GroupedView: React.FC = () => {
         });
     };
 
+    const handleRelativeViewToggle = () => {
+        const newValue = !isRelativeView;
+        setIsRelativeView(newValue);
+
+        if (!newValue) {
+            // Clear relative settings when disabling
+            setRelativeColumn('');
+            setRelativeBaseline('');
+        }
+
+        setSearchParams(prev => {
+            const newParams = new URLSearchParams(prev);
+            if (newValue) {
+                // Keep the relative parameter if we have both column and baseline
+                if (relativeColumn && relativeBaseline) {
+                    newParams.set('relative', `${encodeURIComponent(relativeColumn)}=${encodeURIComponent(relativeBaseline)}`);
+                }
+            } else {
+                newParams.delete('relative');
+            }
+            return newParams;
+        });
+    };
+
+    const handleRelativeColumnChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = event.target.value;
+        setRelativeColumn(value);
+        setRelativeBaseline(''); // Reset baseline when column changes
+
+        setSearchParams(prev => {
+            const newParams = new URLSearchParams(prev);
+            if (value && isRelativeView) {
+                // Only set relative parameter if relative view is enabled
+                newParams.set('relative', `${encodeURIComponent(value)}=`);
+            }
+            return newParams;
+        });
+    };
+
+    const handleRelativeBaselineChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = event.target.value;
+        setRelativeBaseline(value);
+
+        setSearchParams(prev => {
+            const newParams = new URLSearchParams(prev);
+            if (value && relativeColumn && isRelativeView) {
+                newParams.set('relative', `${encodeURIComponent(relativeColumn)}=${encodeURIComponent(value)}`);
+            }
+            return newParams;
+        });
+    };
+
     const addExtraField = () => {
         if (!selectedField) {
             toast({
@@ -339,7 +471,10 @@ const GroupedView: React.FC = () => {
                     color: colorValue || 'pytorch',
                     profile: profileValue || 'default',
                     inverted: invertedValue,
-                    weighted: weightedValue
+                    weighted: weightedValue,
+                    relative: isRelativeView && relativeColumn && relativeBaseline
+                        ? `${encodeURIComponent(relativeColumn)}=${encodeURIComponent(relativeBaseline)}`
+                        : ''
                 }
             };
 
@@ -379,6 +514,21 @@ const GroupedView: React.FC = () => {
         setInvertedValue(parameters.inverted || false);
         setWeightedValue(parameters.weighted || false);
 
+        // Load relative view parameters
+        const relativeParam = parameters.relative || '';
+        if (relativeParam) {
+            const [column, baseline] = relativeParam.split('=');
+            if (column && baseline) {
+                setIsRelativeView(true);
+                setRelativeColumn(decodeURIComponent(column));
+                setRelativeBaseline(decodeURIComponent(baseline));
+            }
+        } else {
+            setIsRelativeView(false);
+            setRelativeColumn('');
+            setRelativeBaseline('');
+        }
+
         // Update URL parameters
         const newParams = new URLSearchParams();
         Object.entries(parameters).forEach(([key, value]) => {
@@ -412,7 +562,7 @@ const GroupedView: React.FC = () => {
 
     const copyJsonToClipboard = async () => {
         try {
-            if (!groupedData || groupedData.length === 0) {
+            if (!relativeData || relativeData.length === 0) {
                 toast({
                     title: 'No data to copy',
                     description: 'Please configure and load data first',
@@ -422,7 +572,7 @@ const GroupedView: React.FC = () => {
                 return;
             }
 
-            const jsonData = JSON.stringify(groupedData, null, 2);
+            const jsonData = JSON.stringify(relativeData, null, 2);
 
             // Try modern clipboard API first
             if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -442,7 +592,7 @@ const GroupedView: React.FC = () => {
 
             toast({
                 title: 'JSON copied to clipboard',
-                description: `${groupedData.length} rows copied as JSON`,
+                description: `${relativeData.length} rows copied as JSON`,
                 status: 'success',
                 duration: 3000,
             });
@@ -458,7 +608,7 @@ const GroupedView: React.FC = () => {
 
     const copyCsvToClipboard = async () => {
         try {
-            if (!groupedData || groupedData.length === 0) {
+            if (!relativeData || relativeData.length === 0) {
                 toast({
                     title: 'No data to copy',
                     description: 'Please configure and load data first',
@@ -469,10 +619,10 @@ const GroupedView: React.FC = () => {
             }
 
             // Create CSV format
-            const headers = Object.keys(groupedData[0]);
+            const headers = Object.keys(relativeData[0]);
             const csvContent = [
                 headers.join(','),
-                ...groupedData.map((row: any) =>
+                ...relativeData.map((row: any) =>
                     headers.map(col => {
                         const value = row[col];
                         // Handle numbers and strings appropriately
@@ -503,7 +653,7 @@ const GroupedView: React.FC = () => {
 
             toast({
                 title: 'CSV copied to clipboard',
-                description: `${groupedData.length} rows copied as CSV`,
+                description: `${relativeData.length} rows copied as CSV`,
                 status: 'success',
                 duration: 3000,
             });
@@ -610,68 +760,131 @@ const GroupedView: React.FC = () => {
                     </FormControl>
                 </HStack>
 
-                {/* Extra Fields Section */}
-                <Box borderWidth={1} borderRadius="md" p={4}>
-                    <VStack align="stretch" spacing={4}>
-                        <Heading size="md">Extra Fields</Heading>
-                        {/* Add Field Form as the first row */}
-                        <HStack>
-                            <FormControl>
-                                <Select
-                                    value={selectedField}
-                                    onChange={(e) => setSelectedField(e.target.value)}
-                                    placeholder="Select a field"
+                
+                <HStack>
+                    {/* Extra Fields Section */}
+                    <Box borderWidth={1} borderRadius="md" width="50%" p={4}>
+                        <VStack align="stretch" spacing={4}>
+                            <Heading size="md">Extra Fields</Heading>
+                            {/* Add Field Form as the first row */}
+                            <HStack>
+                                <FormControl>
+                                    <Select
+                                        value={selectedField}
+                                        onChange={(e) => setSelectedField(e.target.value)}
+                                        placeholder="Select a field"
+                                    >
+                                        {availableFields?.map((field: string) => (
+                                            <option key={field} value={field}>
+                                                {field}
+                                            </option>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                                <FormControl>
+                                    <Input
+                                        value={fieldAlias}
+                                        onChange={(e) => setFieldAlias(e.target.value)}
+                                        placeholder="Field Alias (optional)"
+                                    />
+                                </FormControl>
+                                <Button
+                                    leftIcon={<AddIcon />}
+                                    onClick={addExtraField}
+                                    colorScheme="blue"
+                                    whiteSpace="nowrap"
+                                    minW="110px"
+                                    maxW="140px"
+                                    overflow="hidden"
+                                    textOverflow="ellipsis"
                                 >
-                                    {availableFields?.map((field: string) => (
-                                        <option key={field} value={field}>
-                                            {field}
-                                        </option>
+                                    Add Field
+                                </Button>
+                            </HStack>
+                            {/* List of added extra fields */}
+                            {extraFields.length > 0 && (
+                                <div style={{ padding: '10px' }}>
+                                    {extraFields.map((field, index) => (
+                                        <HStack key={index} justify="space-between">
+                                            <Text>
+                                                <b>{field.field}</b> as <b>{field.alias}</b>
+                                            </Text>
+                                            <Button
+                                                leftIcon={<DeleteIcon />}
+                                                onClick={() => removeExtraField(index)}
+                                                size="sm"
+                                                colorScheme="red"
+                                                variant="ghost"
+                                            >
+                                                Remove
+                                            </Button>
+                                        </HStack>
                                     ))}
-                                </Select>
-                            </FormControl>
-                            <FormControl>
-                                <Input
-                                    value={fieldAlias}
-                                    onChange={(e) => setFieldAlias(e.target.value)}
-                                    placeholder="Field Alias (optional)"
-                                />
-                            </FormControl>
-                            <Button
-                                leftIcon={<AddIcon />}
-                                onClick={addExtraField}
-                                colorScheme="blue"
-                                whiteSpace="nowrap"
-                                minW="110px"
-                                maxW="140px"
-                                overflow="hidden"
-                                textOverflow="ellipsis"
-                            >
-                                Add Field
-                            </Button>
-                        </HStack>
-                        {/* List of added extra fields */}
-                        {extraFields.length > 0 && (
-                            <div style={{ padding: '10px' }}>
-                                {extraFields.map((field, index) => (
-                                    <HStack key={index} justify="space-between">
-                                        <Text>
-                                            <b>{field.field}</b> as <b>{field.alias}</b>
-                                        </Text>
-                                        <Button
-                                            leftIcon={<DeleteIcon />}
-                                            onClick={() => removeExtraField(index)}
-                                            size="sm"
-                                            colorScheme="red"
-                                            variant="ghost"
+                                </div>
+                            )}
+                        </VStack>
+                    </Box>
+                    
+                    {/* Relative View Configuration Form */}
+                    {groupedData && groupedData.length > 0 && (
+                        <Box borderWidth={1} borderRadius="md"  width="50%" height="100%" p={4} bg="gray.50">
+                            <VStack align="stretch" spacing={4}>
+                                <HStack spacing={4}>
+                                    <Heading size="md">Relative View Configuration</Heading>
+                                        <Switch
+                                            id="relative-view-toggle"
+                                            isChecked={isRelativeView}
+                                            onChange={handleRelativeViewToggle}
+                                            isDisabled={!groupedData || groupedData.length === 0}
+                                            colorScheme="green"
+                                            size="md"
+                                        />
+                                </HStack>
+
+                                <HStack spacing={4}>
+                                    <FormControl flex="1">
+                                        <FormLabel>Relative Column</FormLabel>
+                                        <Select
+                                            value={relativeColumn}
+                                            onChange={handleRelativeColumnChange}
+                                            placeholder="Select column for relative calculations"
                                         >
-                                            Remove
-                                        </Button>
-                                    </HStack>
-                                ))}
-                            </div>
-                        )}
-                    </VStack>
-                </Box>
+                                            {availableColumns.map((column) => (
+                                                <option key={column} value={column}>
+                                                    {column}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                    <FormControl flex="1">
+                                        <FormLabel>Baseline Value</FormLabel>
+                                        <Select
+                                            value={relativeBaseline}
+                                            onChange={handleRelativeBaselineChange}
+                                            placeholder="Select baseline value"
+                                            isDisabled={!relativeColumn}
+                                        >
+                                            {availableBaselineValues.map((value) => (
+                                                <option key={String(value)} value={value}>
+                                                    {String(value).replace(/"/g, '')}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </HStack>
+                                {relativeColumn && relativeBaseline && (
+                                    <Text fontSize="sm" color="gray.600">
+                                        Values will be calculated relative to {relativeColumn} = "{relativeBaseline.replace(/"/g, '')}"
+                                    </Text>
+                                )}
+                            </VStack>
+                        </Box>
+                    )}
+                </HStack>
+
+
+
+
 
                 {/* Save Query Button */}
                 <HStack justify="center" spacing={4}>
@@ -696,7 +909,7 @@ const GroupedView: React.FC = () => {
                             colorScheme="blue"
                             variant="outline"
                             size="md"
-                            isDisabled={!groupedData || groupedData.length === 0}
+                            isDisabled={!relativeData || relativeData.length === 0}
                         >
                             Copy as JSON
                         </Button>
@@ -708,7 +921,7 @@ const GroupedView: React.FC = () => {
                             colorScheme="green"
                             variant="outline"
                             size="md"
-                            isDisabled={!groupedData || groupedData.length === 0}
+                            isDisabled={!relativeData || relativeData.length === 0}
                         >
                             Copy as CSV
                         </Button>
@@ -727,9 +940,10 @@ const GroupedView: React.FC = () => {
                             `exec_ids=${execIdsValue}`,
                             `color=${colorValue || 'pytorch'}`,
                             `profile=${profileValue || 'default'}`,
-                            invertedValue && 'inverted=true',
-                            weightedValue && 'weighted=true'
-                        ].filter(Boolean).join('&')}`}
+                            invertedValue ? 'inverted=true' : '',
+                            weightedValue ? 'weighted=true' : '',
+                            isRelativeView ? `relative=${relativeColumn}=${encodeURIComponent(relativeBaseline)}` : ''
+                        ].filter((param): param is string => Boolean(param)).join('&')}`}
                         style={{ width: '100%', height: '100%', border: 'none' }}
                         title="Grouped Plot"
                     />

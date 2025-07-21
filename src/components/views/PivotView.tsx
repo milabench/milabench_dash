@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Box,
     Grid,
@@ -56,8 +56,14 @@ export const PivotView = () => {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [searchParams, setSearchParams] = useSearchParams();
     const [selectedField, setSelectedField] = useState<PivotField | null>(null);
-    const [isRelativePivot, setIsRelativePivot] = useState(false);
-    const [viewMode, setViewMode] = useState<'iframe' | 'table'>('iframe');
+    const [isRelativePivot, setIsRelativePivot] = useState(() => {
+        const relative = searchParams.get('relative');
+        return relative === 'true';
+    });
+    const [viewMode, setViewMode] = useState<'iframe' | 'table'>(() => {
+        const mode = searchParams.get('mode');
+        return mode === 'table' ? 'table' : 'iframe';
+    });
     const [fields, setFields] = useState<PivotField[]>([
         { field: 'Exec:name', type: 'row' },
         { field: 'Pack:name', type: 'row' },
@@ -68,6 +74,7 @@ export const PivotView = () => {
     const [triggerGeneration, setTriggerGeneration] = useState(0);
     const [isGenerating, setIsGenerating] = useState(false);
     const [executionTime, setExecutionTime] = useState<number | null>(null);
+    const [hasInitialized, setHasInitialized] = useState(false);
 
     // Save/Load modal state
     const { isOpen: isSaveModalOpen, onOpen: onSaveModalOpen, onClose: onSaveModalClose } = useDisclosure();
@@ -109,7 +116,7 @@ export const PivotView = () => {
         queryFn: getAllSavedQueries,
     });
 
-    // Load configuration from URL on mount
+    // Load configuration from URL on mount and auto-execute query if URL has parameters
     useEffect(() => {
         const rows = searchParams.get('rows');
         const cols = searchParams.get('cols');
@@ -177,14 +184,31 @@ export const PivotView = () => {
 
             if (newFields.length > 0) {
                 setFields(newFields);
-            }
-        }
-    }, []);
 
-    // Auto-update URL when fields change
+                // Auto-execute query on initial load if URL has parameters
+                if (!hasInitialized) {
+                    setHasInitialized(true);
+                    // Use setTimeout to ensure fields are set before triggering generation
+                    setTimeout(() => {
+                        console.log('Auto-executing query from URL parameters');
+                        setGenerationStartTime(performance.now());
+                        setExecutionTime(null);
+                        setTriggerGeneration(prev => prev + 1);
+                    }, 100);
+                }
+            }
+        } else {
+            // No URL parameters, mark as initialized
+            setHasInitialized(true);
+        }
+    }, [searchParams, hasInitialized]);
+
+    // Auto-update URL when fields change (but not on initial load)
     useEffect(() => {
-        updateURLParams();
-    }, [fields, isRelativePivot]);
+        if (hasInitialized) {
+            updateURLParams();
+        }
+    }, [fields, isRelativePivot, viewMode, hasInitialized]);
 
     // Reset timing when view mode changes
     useEffect(() => {
@@ -263,7 +287,7 @@ export const PivotView = () => {
         setFields(newFields);
     };
 
-    const updateURLParams = () => {
+    const updateURLParams = useCallback(() => {
         const params = new URLSearchParams();
 
         const rows = fields.filter(f => f.type === 'row').map(f => f.field);
@@ -287,9 +311,37 @@ export const PivotView = () => {
             params.append('filters', btoa(JSON.stringify(filters)));
         }
 
+        // Add mode parameter
+        params.append('mode', viewMode);
+
+        // Add relative pivot parameter
+        if (isRelativePivot) {
+            params.append('relative', 'true');
+        }
+
         // Update URL with current configuration
         setSearchParams(params);
-    };
+    }, [fields, viewMode, isRelativePivot, setSearchParams]);
+
+    const handleModeChange = useCallback((newMode: 'iframe' | 'table') => {
+        setViewMode(newMode);
+        // Update URL immediately when mode changes
+        const params = new URLSearchParams(searchParams);
+        params.set('mode', newMode);
+        setSearchParams(params);
+    }, [searchParams, setSearchParams]);
+
+    const handleRelativePivotChange = useCallback((newValue: boolean) => {
+        setIsRelativePivot(newValue);
+        // Update URL immediately when relative pivot changes
+        const params = new URLSearchParams(searchParams);
+        if (newValue) {
+            params.set('relative', 'true');
+        } else {
+            params.delete('relative');
+        }
+        setSearchParams(params);
+    }, [searchParams, setSearchParams]);
 
     const resetPivot = () => {
         setFields([
@@ -298,6 +350,8 @@ export const PivotView = () => {
             { field: 'Metric:name', type: 'column' },
             { field: 'Metric:value', type: 'value', aggregators: ['avg'] },
         ]);
+        setViewMode('iframe');
+        setIsRelativePivot(false);
         setSearchParams(new URLSearchParams());
     };
 
@@ -1188,13 +1242,13 @@ export const PivotView = () => {
                         <ButtonGroup size="sm" isAttached variant="outline">
                             <Button
                                 colorScheme={viewMode === 'iframe' ? 'blue' : 'gray'}
-                                onClick={() => setViewMode('iframe')}
+                                onClick={() => handleModeChange('iframe')}
                             >
                                 Pandas
                             </Button>
                             <Button
                                 colorScheme={viewMode === 'table' ? 'blue' : 'gray'}
-                                onClick={() => setViewMode('table')}
+                                onClick={() => handleModeChange('table')}
                             >
                                 SQL
                             </Button>
@@ -1202,9 +1256,7 @@ export const PivotView = () => {
                         <Button size="sm" onClick={resetPivot}>Reset</Button>
                         <Button size="sm"
                             colorScheme={isRelativePivot ? "green" : "gray"}
-                            onClick={() => {
-                                setIsRelativePivot(!isRelativePivot);
-                            }}
+                            onClick={() => handleRelativePivotChange(!isRelativePivot)}
                         >
                             {!isRelativePivot ? "Relative View" : "Normal View"}
                         </Button>
