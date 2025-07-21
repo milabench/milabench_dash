@@ -336,13 +336,17 @@ export const ExplorerView = () => {
         }
 
         // Set default rows to include run, gpu, pytorch, and bench
-        params.append('rows', 'Pack:name');
+        params.append('rows', 'Weight:priority,Pack:name');
 
         // Set default columns to include metrics
         params.append('cols', pivot_cols.join(','));
 
         // Set default values to include mean and max
         params.append('values', 'Metric:value');
+
+        params.append("mode", "table")
+
+        params.append("relative", "true")
 
         // Add current filters
         if (filters.length > 0) {
@@ -672,7 +676,7 @@ export const ExplorerView = () => {
                                 </Button>
                                 <Button
                                     as={Link}
-                                    to={`/grouped?exec_ids=${executions?.map((e: Execution) => e.id).join(',')}`}
+                                    to={`/grouped?exec_ids=${executions?.map((e: Execution) => e.id).join(',')}&more=Exec:name as run&color=run`}
                                     colorScheme="green"
                                     isDisabled={!executions || executions.length === 0}
                                 >

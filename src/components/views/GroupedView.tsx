@@ -135,7 +135,9 @@ const GroupedView: React.FC = () => {
             if (n1Value) params.set('n1', n1Value);
             if (g2Value) params.set('g2', g2Value);
             if (n2Value) params.set('n2', n2Value);
-            if (metricValue) params.set('metric', metricValue);
+
+            params.set('metric', metricValue || 'rate');
+
             if (more) params.set('more', more);
             params.set('exec_ids', execIdsValue);
             if (colorValue) params.set('color', colorValue);
@@ -144,19 +146,18 @@ const GroupedView: React.FC = () => {
             if (weightedValue) params.set('weighted', 'true');
 
             const response = await axios.get(`/api/grouped/plot?${params.toString()}`);
+            console.log(response)
             return response.data;
         },
         enabled: !!execIdsValue,
     });
 
     // Get available columns from grouped data
-    const availableColumns = React.useMemo(() => {
+    const availableColumns = React.useMemo(() => { 
         if (!groupedData || groupedData.length === 0) return [];
 
         const columns = Object.keys(groupedData[0]).filter(key =>
-            key !== metricValue &&
-            key !== 'exec_id' &&
-            typeof groupedData[0][key] === 'string'
+            key !== metricValue
         );
         return columns;
     }, [groupedData, metricValue]);
@@ -181,8 +182,7 @@ const GroupedView: React.FC = () => {
         // Group data by the combination of group fields (excluding the relative column)
         const groupKeys = Object.keys(groupedData[0]).filter(key =>
             key !== relativeColumn &&
-            key !== metricValue &&
-            key !== 'exec_id'
+            key !== metricValue
         );
 
         // Find baseline values for each group combination
@@ -826,7 +826,7 @@ const GroupedView: React.FC = () => {
                     </Box>
                     
                     {/* Relative View Configuration Form */}
-                    {groupedData && groupedData.length > 0 && (
+                    {(
                         <Box borderWidth={1} borderRadius="md"  width="50%" height="100%" p={4} bg="gray.50">
                             <VStack align="stretch" spacing={4}>
                                 <HStack spacing={4}>
@@ -835,7 +835,7 @@ const GroupedView: React.FC = () => {
                                             id="relative-view-toggle"
                                             isChecked={isRelativeView}
                                             onChange={handleRelativeViewToggle}
-                                            isDisabled={!groupedData || groupedData.length === 0}
+                                            isDisabled={false}
                                             colorScheme="green"
                                             size="md"
                                         />
